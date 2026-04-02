@@ -1,33 +1,37 @@
 // backend/src/controllers/imageController.ts
 import { Response } from 'express';
 import OpenAI from 'openai';
-import Anthropic from '@anthropic-ai/sdk';
 import { AuthRequest } from '../middleware/authGuard';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+function buildPrompt(topic: string, platform: string): string {
+  const t = (topic || '').toLowerCase();
+  let subject = 'industrial electrical control panel with cables and circuit breakers';
+
+  if (t.includes('motor')) subject = 'three-phase electric motor in industrial setting, copper windings visible';
+  else if (t.includes('contator') || t.includes('rele')) subject = 'industrial contactors and relay modules on DIN rail inside control panel';
+  else if (t.includes('sensor') || t.includes('fim de curso')) subject = 'industrial limit switch sensor on metal machinery, close-up';
+  else if (t.includes('painel') || t.includes('quadro')) subject = 'open industrial electrical panel with organized cables, busbars and circuit breakers';
+  else if (t.includes('cabo') || t.includes('fiacao')) subject = 'organized industrial cable tray with color-coded wires in factory';
+  else if (t.includes('grao') || t.includes('silo') || t.includes('armazen')) subject = 'grain storage silo with industrial electrical automation panel nearby';
+  else if (t.includes('automac')) subject = 'PLC automation panel with digital displays and industrial wiring';
+  else if (t.includes('nr10') || t.includes('seguranca')) subject = 'electrical safety equipment: insulated gloves, voltage tester, safety signage';
+  else if (t.includes('inversor') || t.includes('frequencia')) subject = 'variable frequency drive VFD installed in industrial control cabinet';
+
+  const size = platform === 'linkedin' ? 'landscape 1200x627' : 'square 1080x1080';
+  return `Professional industrial photography: ${subject}. Dark blue and orange color palette, dramatic lighting, sharp focus, photorealistic. No text, no logos, no visible human faces. Clean composition for ${platform} social media post, ${size} format.`;
+}
 
 export async function generatePostImage(req: AuthRequest, res: Response) {
   try {
-    const { postContent, topic, platform = 'linkedin' } = req.body;
+    const { topic, platform = 'linkedin' } = req.body;
 
-    const promptResponse = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 300,
-      messages: [{
-        role: 'user',
-        content: `Crie um prompt em ingles para DALL-E 3 gerar uma imagem profissional para o Manual do Eletricista.
-TEMA: ${topic || postContent?.substring(0, 200)}
-PLATAFORMA: ${platform}
-REGRAS: Estilo fotografico realista, relacionado a eletricidade industrial, paineis, cabos, equipamentos. Cores: azul escuro, cinza, laranja. SEM texto na imagem. SEM pessoas identificaveis. Composicao limpa para redes sociais. Formato ${platform === 'linkedin' ? '1200x627px landscape' : '1080x1080px square'}.
-Retorne SOMENTE o prompt em ingles.`,
-      }],
-    });
+    if (!process.env.OPENAI_API_KEY) {
+      return res.status(503).json({ error: 'OPENAI_API_KEY nao configurada.' });
+    }
 
-    const imagePrompt = promptResponse.content[0].type === 'text'
-      ? promptResponse.content[0].text.trim()
-      : 'Professional electrical installation, industrial control panel, blue and orange color scheme, photorealistic';
-
+    const imagePrompt = buildPrompt(topic || '', platform);
     const size = platform === 'linkedin' ? '1792x1024' : '1024x1024';
 
     const imageResponse = await openai.images.generate({
@@ -41,31 +45,14 @@ Retorne SOMENTE o prompt em ingles.`,
     return res.json({
       imageUrl: imageResponse.data?.[0]?.url ?? null,
       prompt: imagePrompt,
-      size,
       revisedPrompt: imageResponse.data?.[0]?.revised_prompt ?? null,
     });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message || 'Erro ao gerar imagem' });
+    const msg = err?.error?.message || err?.message || 'Erro ao gerar imagem';
+    return res.status(500).json({ error: msg });
   }
 }
 
 export async function generateImageOptions(req: AuthRequest, res: Response) {
-  try {
-    const { topic } = req.body;
-
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 600,
-      messages: [{
-        role: 'user',
-        content: `Crie 3 prompts diferentes em ingles para DALL-E 3 sobre o tema: "${topic}". Cada prompt deve ser uma abordagem visual diferente, SEM texto na imagem, relacionado a eletricidade industrial.
-Retorne JSON: { "options": [{ "label": "Foto realista", "prompt": "..." }, { "label": "Ilustracao tecnica", "prompt": "..." }, { "label": "Close-up industrial", "prompt": "..." }] }`,
-      }],
-    });
-
-    const text = response.content[0].type === 'text' ? response.content[0].text : '{}';
-    return res.json(JSON.parse(text.replace(/```json|```/g, '').trim()));
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
-  }
+  return res.json({ options: [] });
 }

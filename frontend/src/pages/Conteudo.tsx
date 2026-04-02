@@ -30,6 +30,7 @@ export default function Conteudo() {
   const [loadingGen, setLoadingGen] = useState(false);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [loadingImage, setLoadingImage] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
   const [savedPostId, setSavedPostId] = useState<string | null>(null);
   const [showPublishModal, setShowPublishModal] = useState(false);
 
@@ -68,7 +69,7 @@ export default function Conteudo() {
   }
 
   async function generate() {
-    setLoadingGen(true); setGenerated(null); setGeneratedImage(null); setSavedPostId(null);
+    setLoadingGen(true); setGenerated(null); setGeneratedImage(null); setImageError(null); setSavedPostId(null);
     try {
       const toneLabel = TONES.find(t => t.value === tone)?.label || tone;
       const productStr = selectedProduct ? `${selectedProduct.name}${selectedProduct.url ? ' (link: ' + selectedProduct.url + ')' : ''}` : '';
@@ -81,12 +82,14 @@ export default function Conteudo() {
   }
 
   async function generateImage(postContent: string) {
-    setLoadingImage(true);
+    setLoadingImage(true); setImageError(null);
     try {
-      const { data } = await api.post('/content/generate-image', { postContent, topic, platform });
-      setGeneratedImage(data.imageUrl);
-    } catch { /* imagem e opcional, nao bloqueia */ }
-    finally { setLoadingImage(false); }
+      const { data } = await api.post('/content/generate-image', { topic, platform, postContent });
+      if (data.imageUrl) setGeneratedImage(data.imageUrl);
+      else setImageError(data.error || 'Imagem nao retornada.');
+    } catch (e: any) {
+      setImageError(e.response?.data?.error || 'Erro ao gerar imagem com DALL-E.');
+    } finally { setLoadingImage(false); }
   }
 
   async function savePost(postData: any, plt: string, imageUrl?: string | null) {
@@ -379,8 +382,14 @@ export default function Conteudo() {
                       <div className="bg-gray-800 rounded-xl h-40 flex items-center justify-center">
                         <div className="text-center">
                           <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-                          <p className="text-gray-500 text-xs">Gerando imagem...</p>
+                          <p className="text-gray-500 text-xs">Gerando imagem com DALL-E 3...</p>
                         </div>
+                      </div>
+                    )}
+                    {imageError && !loadingImage && (
+                      <div className="bg-red-900/20 border border-red-800 rounded-lg p-3 space-y-2">
+                        <p className="text-red-400 text-xs">{imageError}</p>
+                        <button onClick={() => generateImage(generated.content)} className="text-xs text-gray-400 hover:text-white underline">Tentar novamente</button>
                       </div>
                     )}
                     {generatedImage && !loadingImage && (
