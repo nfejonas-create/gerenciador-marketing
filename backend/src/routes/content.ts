@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authGuard } from '../middleware/authGuard';
-import { generatePost, analyzeContent, generateCalendar, getPosts, savePost, uploadAndGeneratePosts } from '../controllers/contentController';
+import { generatePost, analyzeContent, generateCalendar, getPosts, savePost, updatePost, uploadAndGeneratePosts } from '../controllers/contentController';
 import { generatePostImage, generateImageOptions } from '../controllers/imageController';
 import { upload } from '../services/upload';
 import { publishPost } from '../controllers/publishController';
@@ -15,5 +15,6 @@ router.post('/generate-image', generatePostImage);
 router.post('/generate-image-options', generateImageOptions);
 router.get('/posts', getPosts);
 router.post('/posts', savePost);
+router.patch('/posts/:id', updatePost);
 router.post('/publish', publishPost);
 export default router;

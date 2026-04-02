@@ -248,7 +248,7 @@ export async function getPosts(req: AuthRequest, res: Response) {
 
 export async function savePost(req: AuthRequest, res: Response) {
   try {
-    const { platform, content, cta, hashtags, scheduledAt, status } = req.body;
+    const { platform, content, cta, hashtags, scheduledAt, status, imageUrl } = req.body;
     const post = await prisma.post.create({
       data: {
         userId: req.userId!,
@@ -258,11 +258,30 @@ export async function savePost(req: AuthRequest, res: Response) {
         hashtags: Array.isArray(hashtags) ? hashtags.join(' ') : hashtags,
         status: status || 'draft',
         scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
+        imageUrl: imageUrl || null,
       },
     });
     return res.json(post);
   } catch {
     return res.status(500).json({ error: 'Erro ao salvar post' });
+  }
+}
+
+export async function updatePost(req: AuthRequest, res: Response) {
+  try {
+    const { id } = req.params;
+    const { status, scheduledAt, imageUrl } = req.body;
+    const post = await prisma.post.updateMany({
+      where: { id, userId: req.userId! },
+      data: {
+        ...(status && { status }),
+        ...(scheduledAt && { scheduledAt: new Date(scheduledAt) }),
+        ...(imageUrl && { imageUrl }),
+      },
+    });
+    return res.json(post);
+  } catch {
+    return res.status(500).json({ error: 'Erro ao atualizar post' });
   }
 }
 
