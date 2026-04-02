@@ -4,12 +4,60 @@ import { PrismaClient } from '@prisma/client';
 import Anthropic from '@anthropic-ai/sdk';
 import { AuthRequest } from '../middleware/authGuard';
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const pdfParseLib = require('pdf-parse');
-const pdfParse = pdfParseLib.default || pdfParseLib;
-
 const prisma = new PrismaClient();
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+async function extractFromFile(buffer: Buffer, mimetype: string): Promise<string> {
+  const base64 = buffer.toString('base64');
+
+  if (mimetype === 'application/pdf') {
+    const response = await anthropic.messages.create({
+      model: 'claude-opus-4-5',
+      max_tokens: 4096,
+      messages: [{
+        role: 'user',
+        content: [
+          {
+            type: 'document',
+            source: { type: 'base64', media_type: 'application/pdf', data: base64 },
+          } as any,
+          {
+            type: 'text',
+            text: 'Extraia e transcreva todo o conteudo tecnico deste documento. Mantenha titulos, topicos e informacoes tecnicas. Seja completo e preciso.',
+          },
+        ],
+      }],
+    });
+    return response.content[0].type === 'text' ? response.content[0].text : '';
+  }
+
+  if (mimetype === 'text/plain') {
+    return buffer.toString('utf-8').substring(0, 50000);
+  }
+
+  if (mimetype.startsWith('image/')) {
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1500,
+      messages: [{
+        role: 'user',
+        content: [
+          {
+            type: 'image',
+            source: { type: 'base64', media_type: mimetype as 'image/jpeg' | 'image/png' | 'image/webp', data: base64 },
+          },
+          {
+            type: 'text',
+            text: 'Descreva detalhadamente o conteudo desta imagem. Se houver texto, transcreva-o. Se for diagrama eletrico, descreva os componentes e conexoes.',
+          },
+        ],
+      }],
+    });
+    return response.content[0].type === 'text' ? response.content[0].text : '';
+  }
+
+  return '';
+}
 
 export async function listKnowledge(req: AuthRequest, res: Response) {
   const { tag, type } = req.query;
@@ -32,44 +80,19 @@ export async function uploadToKnowledge(req: AuthRequest, res: Response) {
     const { title, tags } = req.body;
     const { originalname, mimetype, buffer, size } = req.file;
 
-    let extractedContent = '';
-
-    if (mimetype === 'application/pdf') {
-      const parsed = await pdfParse(buffer);
-      extractedContent = parsed.text?.substring(0, 50000) || '';
-    } else if (mimetype === 'text/plain') {
-      extractedContent = buffer.toString('utf-8').substring(0, 50000);
-    } else if (mimetype.startsWith('image/')) {
-      const base64 = buffer.toString('base64');
-      const response = await anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1500,
-        messages: [{
-          role: 'user',
-          content: [
-            {
-              type: 'image',
-              source: { type: 'base64', media_type: mimetype as 'image/jpeg' | 'image/png' | 'image/webp', data: base64 },
-            },
-            {
-              type: 'text',
-              text: 'Voce e um assistente do Manual do Eletricista. Descreva detalhadamente o conteudo desta imagem. Se houver texto, transcreva-o. Se for um diagrama eletrico, esquema ou foto de instalacao, descreva os componentes, conexoes e o que esta sendo mostrado. Seja tecnico e preciso.',
-            },
-          ],
-        }],
-      });
-      extractedContent = response.content[0].type === 'text' ? response.content[0].text : '';
-    }
+    const extractedContent = await extractFromFile(buffer, mimetype);
 
     if (!extractedContent.trim()) {
       return res.status(422).json({ error: 'Nao foi possivel extrair conteudo do arquivo.' });
     }
 
+    const type = mimetype.startsWith('image/') ? 'image' : mimetype === 'application/pdf' ? 'pdf' : 'text';
+
     const item = await prisma.knowledgeBase.create({
       data: {
         userId: req.userId!,
         title: title || originalname,
-        type: mimetype.startsWith('image/') ? 'image' : mimetype === 'application/pdf' ? 'pdf' : 'text',
+        type,
         content: extractedContent,
         filename: originalname,
         fileSize: size,

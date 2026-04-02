@@ -5,12 +5,46 @@ import Anthropic from '@anthropic-ai/sdk';
 import { AuthRequest } from '../middleware/authGuard';
 import { searchKnowledgeForTopic } from './knowledgeController';
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const pdfParseLib = require('pdf-parse');
-const pdfParse = pdfParseLib.default || pdfParseLib;
-
 const prisma = new PrismaClient();
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+async function extractTextFromFile(buffer: Buffer, mimetype: string): Promise<string> {
+  const base64 = buffer.toString('base64');
+
+  if (mimetype === 'application/pdf') {
+    const response = await anthropic.messages.create({
+      model: 'claude-opus-4-5',
+      max_tokens: 4096,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } } as any,
+          { type: 'text', text: 'Extraia todo o conteudo tecnico deste documento para uso na geracao de posts.' },
+        ],
+      }],
+    });
+    return response.content[0].type === 'text' ? response.content[0].text.substring(0, 8000) : '';
+  }
+
+  if (mimetype === 'text/plain') return buffer.toString('utf-8').substring(0, 8000);
+
+  if (mimetype.startsWith('image/')) {
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1000,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: mimetype as 'image/jpeg' | 'image/png' | 'image/webp', data: base64 } },
+          { type: 'text', text: 'Descreva em detalhes este material tecnico eletrico. Se houver texto, transcreva. Se for esquema eletrico, descreva os componentes e conexoes.' },
+        ],
+      }],
+    });
+    return response.content[0].type === 'text' ? response.content[0].text : '';
+  }
+
+  return '';
+}
 
 const HASHTAG_SETS: Record<string, string[]> = {
   default: ['#ManualDoEletricista', '#Eletricista', '#Eletrica', '#InstalacaoEletrica', '#EletricidadeIndustrial'],
@@ -241,26 +275,7 @@ export async function uploadAndGeneratePosts(req: AuthRequest, res: Response) {
 
     let extractedText = '';
 
-    if (mimetype === 'application/pdf') {
-      const parsed = await pdfParse(buffer);
-      extractedText = parsed.text?.substring(0, 8000) || '';
-    } else if (mimetype === 'text/plain') {
-      extractedText = buffer.toString('utf-8').substring(0, 8000);
-    } else if (mimetype.startsWith('image/')) {
-      const base64 = buffer.toString('base64');
-      const visionResp = await anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'image', source: { type: 'base64', media_type: mimetype as 'image/jpeg' | 'image/png' | 'image/webp', data: base64 } },
-            { type: 'text', text: 'Descreva em detalhes este material tecnico eletrico. Se houver texto, transcreva. Se for esquema eletrico, descreva os componentes e conexoes.' },
-          ],
-        }],
-      });
-      extractedText = visionResp.content[0].type === 'text' ? visionResp.content[0].text : '';
-    }
+    extractedText = await extractTextFromFile(buffer, mimetype);
 
     if (!extractedText.trim()) return res.status(422).json({ error: 'Nao foi possivel extrair conteudo.' });
 
