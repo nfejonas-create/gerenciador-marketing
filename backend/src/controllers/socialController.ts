@@ -75,39 +75,15 @@ export async function syncMetrics(req: AuthRequest, res: Response) {
 
       if (account.platform === 'linkedin') {
         try {
-          const headers = { Authorization: `Bearer ${account.accessToken}` };
+          // LinkedIn bloqueia metricas para perfis pessoais via API
+          // Usamos dados reais dos posts publicados pelo nosso app
+          const publishedPosts = await prisma.post.findMany({
+            where: { userId: req.userId!, platform: 'linkedin', status: 'published' },
+            orderBy: { publishedAt: 'desc' },
+            take: 30,
+          });
 
-          // 1. Buscar perfil para obter personId
-          const meResp = await axios.get('https://api.linkedin.com/v2/me', { headers });
-          const personId = meResp.data.id;
-
-          // 2. Total de conexoes (unico endpoint de "seguidores" disponivel para perfil pessoal)
-          let connections = 0;
-          const connResp = await axios.get('https://api.linkedin.com/v2/connections', {
-            headers, params: { q: 'viewer', start: 0, count: 0 },
-          }).catch(() => null);
-          connections = connResp?.data?.paging?.total || 0;
-
-          // 3. Posts publicados pelo usuario
-          const postsResp = await axios.get('https://api.linkedin.com/v2/ugcPosts', {
-            headers,
-            params: { q: 'authors', authors: `List(urn:li:person:${personId})`, count: 20, sortBy: 'LAST_MODIFIED' },
-          }).catch(() => null);
-
-          const posts = postsResp?.data?.elements || [];
-          let totalLikes = 0;
-          let totalComments = 0;
-
-          // 4. Para cada post, buscar likes e comentarios
-          for (const post of posts.slice(0, 10)) {
-            const urn = encodeURIComponent(post.id);
-            const [likesResp, commentsResp] = await Promise.all([
-              axios.get(`https://api.linkedin.com/v2/socialActions/${urn}/likes`, { headers, params: { count: 0 } }).catch(() => null),
-              axios.get(`https://api.linkedin.com/v2/socialActions/${urn}/comments`, { headers, params: { count: 0 } }).catch(() => null),
-            ]);
-            totalLikes += likesResp?.data?.paging?.total || 0;
-            totalComments += commentsResp?.data?.paging?.total || 0;
-          }
+          const totalPosts = publishedPosts.length;
 
           await prisma.metric.create({
             data: {
@@ -115,15 +91,15 @@ export async function syncMetrics(req: AuthRequest, res: Response) {
               platform: 'linkedin',
               date: new Date(),
               views: 0,
-              likes: totalLikes,
-              comments: totalComments,
-              shares: posts.length,
-              followers: connections,
+              likes: 0,
+              comments: 0,
+              shares: totalPosts,
+              followers: 0,
             },
           });
-          results.push({ platform: 'linkedin', status: 'ok', connections, posts: posts.length, likes: totalLikes, comments: totalComments });
+          results.push({ platform: 'linkedin', status: 'ok', posts: totalPosts, note: 'dados do banco - API LinkedIn bloqueada para perfis pessoais' });
         } catch (err: any) {
-          results.push({ platform: 'linkedin', status: 'error', message: err?.message || 'Falha ao buscar metricas do LinkedIn' });
+          results.push({ platform: 'linkedin', status: 'error', message: err?.message });
         }
       }
     }
