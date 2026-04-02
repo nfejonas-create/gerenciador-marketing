@@ -31,6 +31,9 @@ export default function Conteudo() {
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [loadingImage, setLoadingImage] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
+  const [imageStyle, setImageStyle] = useState('realista');
+  const [imagePrompt, setImagePrompt] = useState<string | null>(null);
+  const [promptCopied, setPromptCopied] = useState(false);
   const [savedPostId, setSavedPostId] = useState<string | null>(null);
   const [showPublishModal, setShowPublishModal] = useState(false);
 
@@ -69,27 +72,58 @@ export default function Conteudo() {
   }
 
   async function generate() {
-    setLoadingGen(true); setGenerated(null); setGeneratedImage(null); setImageError(null); setSavedPostId(null);
+    setLoadingGen(true); setGenerated(null); setGeneratedImage(null); setImageError(null); setImagePrompt(null); setSavedPostId(null);
     try {
       const toneLabel = TONES.find(t => t.value === tone)?.label || tone;
       const productStr = selectedProduct ? `${selectedProduct.name}${selectedProduct.url ? ' (link: ' + selectedProduct.url + ')' : ''}` : '';
       const { data } = await api.post('/content/generate', { topic, platform, tone: toneLabel, product: productStr });
       setGenerated(data);
-      // Gera imagem automaticamente
-      generateImage(data.content);
     } catch (e: any) { alert(e.response?.data?.error || 'Erro ao gerar post'); }
     finally { setLoadingGen(false); }
   }
 
-  async function generateImage(postContent: string) {
-    setLoadingImage(true); setImageError(null);
-    try {
-      const { data } = await api.post('/content/generate-image', { topic, platform, postContent });
-      if (data.imageUrl) setGeneratedImage(data.imageUrl);
-      else setImageError(data.error || 'Imagem nao retornada.');
-    } catch (e: any) {
-      setImageError(e.response?.data?.error || 'Erro ao gerar imagem com DALL-E.');
-    } finally { setLoadingImage(false); }
+  const IMAGE_STYLES = [
+    { value: 'realista', label: 'Realista', desc: 'Foto profissional' },
+    { value: 'ilustrativo', label: 'Ilustrativo', desc: 'Arte digital' },
+    { value: 'criativo', label: 'Criativo', desc: 'Conceitual/abstrato' },
+    { value: 'post', label: 'Post feed', desc: '1:1 quadrado' },
+    { value: 'story', label: 'Story/Reels', desc: '9:16 vertical' },
+  ];
+
+  function buildImagePrompt(style: string): string {
+    const t = (topic || generated?.content || '').substring(0, 200).toLowerCase();
+    let subject = 'industrial electrical control panel with organized cables and circuit breakers';
+    if (t.includes('motor')) subject = 'three-phase electric motor in industrial environment, copper windings';
+    else if (t.includes('contator') || t.includes('rele')) subject = 'industrial contactors and relays on DIN rail inside control panel';
+    else if (t.includes('painel') || t.includes('quadro')) subject = 'open industrial electrical panel with busbars and circuit breakers';
+    else if (t.includes('cabo') || t.includes('fiacao')) subject = 'organized industrial cable tray with color-coded wires';
+    else if (t.includes('grao') || t.includes('silo')) subject = 'grain storage silo with industrial electrical automation nearby';
+    else if (t.includes('inversor')) subject = 'variable frequency drive VFD in industrial control cabinet';
+    else if (t.includes('sensor')) subject = 'industrial limit switch and proximity sensors on machinery';
+
+    const styleMap: Record<string, string> = {
+      realista: 'professional industrial photography, photorealistic, dramatic lighting, sharp focus, dark blue and orange palette',
+      ilustrativo: 'digital illustration, technical drawing style, clean lines, dark blue and orange palette, professional',
+      criativo: 'creative conceptual art, dynamic composition, glowing electrical elements, dark dramatic background, orange and blue neon accents',
+      post: 'square 1:1 format, centered composition, professional social media post',
+      story: 'vertical 9:16 format, bold composition, optimized for Instagram Story or Reels',
+    };
+
+    return `${styleMap[style]}: ${subject}. No text, no logos, no visible human faces. High quality, suitable for social media.`;
+  }
+
+  function generateImagePrompt(style: string) {
+    setImageStyle(style);
+    const p = buildImagePrompt(style);
+    setImagePrompt(p);
+    setPromptCopied(false);
+  }
+
+  async function copyPrompt() {
+    if (!imagePrompt) return;
+    await navigator.clipboard.writeText(imagePrompt);
+    setPromptCopied(true);
+    setTimeout(() => setPromptCopied(false), 2000);
   }
 
   async function savePost(postData: any, plt: string, imageUrl?: string | null) {
@@ -373,41 +407,28 @@ export default function Conteudo() {
                     </div>
                   )}
 
-                  {/* Imagem */}
+                  {/* Gerador de prompt para imagem externa */}
                   <div className="border-t border-gray-800 pt-4">
-                    <p className="text-xs text-gray-500 mb-2 flex items-center gap-1">
-                      <ImageIcon size={12} /> Imagem gerada com DALL-E 3
+                    <p className="text-xs text-gray-500 mb-3 flex items-center gap-1">
+                      <ImageIcon size={12} /> Gerar prompt para imagem — copie e use no Midjourney, DALL-E, Leonardo ou outro gerador
                     </p>
-                    {loadingImage && (
-                      <div className="bg-gray-800 rounded-xl h-40 flex items-center justify-center">
-                        <div className="text-center">
-                          <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-                          <p className="text-gray-500 text-xs">Gerando imagem com DALL-E 3...</p>
-                        </div>
+                    <div className="flex gap-2 flex-wrap mb-3">
+                      {IMAGE_STYLES.map(s => (
+                        <button key={s.value} onClick={() => generateImagePrompt(s.value)}
+                          className={`flex flex-col items-center px-3 py-2 rounded-lg border text-xs transition-all ${imageStyle === s.value && imagePrompt ? 'border-purple-500 bg-purple-900/30 text-purple-300' : 'border-gray-700 bg-gray-800 text-gray-400 hover:border-gray-600'}`}>
+                          <span className="font-medium">{s.label}</span>
+                          <span className="opacity-70">{s.desc}</span>
+                        </button>
+                      ))}
+                    </div>
+                    {imagePrompt && (
+                      <div className="bg-gray-800 rounded-lg p-3 space-y-2">
+                        <p className="text-gray-300 text-xs leading-relaxed">{imagePrompt}</p>
+                        <button onClick={copyPrompt}
+                          className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg transition-colors ${promptCopied ? 'bg-green-700 text-green-200' : 'bg-gray-700 hover:bg-gray-600 text-gray-300'}`}>
+                          {promptCopied ? '✓ Copiado!' : 'Copiar prompt'}
+                        </button>
                       </div>
-                    )}
-                    {imageError && !loadingImage && (
-                      <div className="bg-red-900/20 border border-red-800 rounded-lg p-3 space-y-2">
-                        <p className="text-red-400 text-xs">{imageError}</p>
-                        <button onClick={() => generateImage(generated.content)} className="text-xs text-gray-400 hover:text-white underline">Tentar novamente</button>
-                      </div>
-                    )}
-                    {generatedImage && !loadingImage && (
-                      <div className="space-y-2">
-                        <img src={generatedImage} alt="Imagem do post" className="w-full rounded-xl object-cover max-h-64" />
-                        <div className="flex gap-2">
-                          <a href={generatedImage} target="_blank" rel="noopener noreferrer"
-                            className="text-xs text-blue-400 hover:text-blue-300">Ver em tamanho real</a>
-                          <button onClick={() => generateImage(generated.content)}
-                            className="text-xs text-gray-500 hover:text-gray-300">Gerar outra</button>
-                        </div>
-                      </div>
-                    )}
-                    {!generatedImage && !loadingImage && (
-                      <button onClick={() => generateImage(generated.content)}
-                        className="flex items-center gap-2 text-sm text-gray-400 hover:text-white bg-gray-800 hover:bg-gray-700 px-4 py-2 rounded-lg transition-colors">
-                        <ImageIcon size={14} /> Gerar imagem
-                      </button>
                     )}
                   </div>
                 </>

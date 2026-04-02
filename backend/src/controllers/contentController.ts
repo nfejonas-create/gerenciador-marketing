@@ -116,17 +116,23 @@ Nunca inventar dados tecnicos. Basear-se no material fornecido.`;
     const userPrompt = `${template}
 
 TEMA: ${topic}
-${product ? `PRODUTO A MENCIONAR: ${product}` : ''}
+${product ? `PRODUTO/LINK A MENCIONAR: ${product} — coloque o link APENAS no campo "cta" do JSON, NAO no corpo do post` : ''}
 ${tone ? `TOM ADICIONAL: ${tone}` : ''}
 
 ${kbContext ? `BASE DE CONHECIMENTO (use estas informacoes como fonte):\n---\n${kbContext}\n---\n` : ''}
 
-HASHTAGS A USAR (cole no final): ${hashtags.join(' ')}
+REGRAS IMPORTANTES:
+- O corpo do post (campo "content") NAO deve conter o CTA nem o link
+- O CTA vai APENAS no campo "cta" do JSON, no formato: texto de chamada + link
+- As hashtags vao APENAS no campo "hashtags", NAO no corpo do post
+- O corpo deve terminar naturalmente, sem repetir CTA
 
-Gere o post no formato exato acima e retorne SOMENTE JSON valido:
+HASHTAGS A USAR: ${hashtags.join(' ')}
+
+Retorne SOMENTE JSON valido:
 {
-  "content": "texto completo do post com quebras de linha corretas",
-  "cta": "a linha de CTA isolada",
+  "content": "corpo do post SEM cta e SEM hashtags",
+  "cta": "frase de chamada para acao + link do produto se houver",
   "hashtags": ${JSON.stringify(hashtags)}
 }`;
 
