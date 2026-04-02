@@ -39,10 +39,10 @@ Retorne SOMENTE o prompt em ingles.`,
     });
 
     return res.json({
-      imageUrl: imageResponse.data[0].url,
+      imageUrl: imageResponse.data?.[0]?.url ?? null,
       prompt: imagePrompt,
       size,
-      revisedPrompt: imageResponse.data[0].revised_prompt,
+      revisedPrompt: imageResponse.data?.[0]?.revised_prompt ?? null,
     });
   } catch (err: any) {
     return res.status(500).json({ error: err.message || 'Erro ao gerar imagem' });
