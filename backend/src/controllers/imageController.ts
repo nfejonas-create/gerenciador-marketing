@@ -1,9 +1,7 @@
 // backend/src/controllers/imageController.ts
 import { Response } from 'express';
-import OpenAI from 'openai';
+import axios from 'axios';
 import { AuthRequest } from '../middleware/authGuard';
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 function buildPrompt(topic: string, platform: string): string {
   const t = (topic || '').toLowerCase();
@@ -19,36 +17,45 @@ function buildPrompt(topic: string, platform: string): string {
   else if (t.includes('nr10') || t.includes('seguranca')) subject = 'electrical safety equipment: insulated gloves, voltage tester, safety signage';
   else if (t.includes('inversor') || t.includes('frequencia')) subject = 'variable frequency drive VFD installed in industrial control cabinet';
 
-  const size = platform === 'linkedin' ? 'landscape 1200x627' : 'square 1080x1080';
-  return `Professional industrial photography: ${subject}. Dark blue and orange color palette, dramatic lighting, sharp focus, photorealistic. No text, no logos, no visible human faces. Clean composition for ${platform} social media post, ${size} format.`;
+  return `Professional industrial photography: ${subject}. Dark blue and orange color palette, dramatic studio lighting, sharp focus, photorealistic, high quality. No text, no logos, no visible human faces. Clean professional composition for social media.`;
 }
 
 export async function generatePostImage(req: AuthRequest, res: Response) {
   try {
     const { topic, platform = 'linkedin' } = req.body;
 
-    if (!process.env.OPENAI_API_KEY) {
-      return res.status(503).json({ error: 'OPENAI_API_KEY nao configurada.' });
-    }
+    const apiKey = process.env.STABILITY_API_KEY;
+    if (!apiKey) return res.status(503).json({ error: 'STABILITY_API_KEY nao configurada.' });
 
-    const imagePrompt = buildPrompt(topic || '', platform);
-    const size = platform === 'linkedin' ? '1792x1024' : '1024x1024';
+    const prompt = buildPrompt(topic || '', platform);
+    const aspectRatio = platform === 'linkedin' ? '16:9' : '1:1';
 
-    const imageResponse = await openai.images.generate({
-      model: 'dall-e-3',
-      prompt: imagePrompt,
-      n: 1,
-      size: size as '1024x1024' | '1792x1024',
-      quality: 'standard',
-    });
+    const form = new FormData();
+    form.append('prompt', prompt);
+    form.append('aspect_ratio', aspectRatio);
+    form.append('output_format', 'jpeg');
 
-    return res.json({
-      imageUrl: imageResponse.data?.[0]?.url ?? null,
-      prompt: imagePrompt,
-      revisedPrompt: imageResponse.data?.[0]?.revised_prompt ?? null,
-    });
+    const response = await axios.post(
+      'https://api.stability.ai/v2beta/stable-image/generate/core',
+      form,
+      {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          Accept: 'image/*',
+        },
+        responseType: 'arraybuffer',
+        timeout: 60000,
+      }
+    );
+
+    const base64 = Buffer.from(response.data).toString('base64');
+    const imageUrl = `data:image/jpeg;base64,${base64}`;
+
+    return res.json({ imageUrl, prompt });
   } catch (err: any) {
-    const msg = err?.error?.message || err?.message || 'Erro ao gerar imagem';
+    const msg = err?.response?.data
+      ? Buffer.from(err.response.data).toString('utf-8')
+      : err?.message || 'Erro ao gerar imagem';
     return res.status(500).json({ error: msg });
   }
 }
