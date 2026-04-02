@@ -6,7 +6,8 @@ import { AuthRequest } from '../middleware/authGuard';
 import { searchKnowledgeForTopic } from './knowledgeController';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const pdfParse = require('pdf-parse');
+const pdfParseLib = require('pdf-parse');
+const pdfParse = pdfParseLib.default || pdfParseLib;
 
 const prisma = new PrismaClient();
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
