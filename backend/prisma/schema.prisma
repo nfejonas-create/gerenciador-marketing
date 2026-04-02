@@ -1,0 +1,92 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String          @id @default(cuid())
+  email          String          @unique
+  name           String
+  password       String?
+  avatar         String?
+  provider       String          @default("local")
+  googleId       String?
+  linkedinId     String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  socialAccounts SocialAccount[]
+  metrics        Metric[]
+  posts          Post[]
+  products       Product[]
+  calendar       ContentCalendar[]
+}
+
+model SocialAccount {
+  id          String   @id @default(cuid())
+  userId      String
+  platform    String
+  accessToken String
+  pageId      String?
+  pageName    String?
+  expiresAt   DateTime?
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([userId, platform])
+}
+
+model Metric {
+  id          String   @id @default(cuid())
+  userId      String
+  platform    String
+  date        DateTime
+  likes       Int      @default(0)
+  comments    Int      @default(0)
+  shares      Int      @default(0)
+  views       Int      @default(0)
+  followers   Int      @default(0)
+  reach       Int      @default(0)
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Post {
+  id          String          @id @default(cuid())
+  userId      String
+  platform    String
+  content     String
+  cta         String?
+  hashtags    String?
+  status      String          @default("draft")
+  scheduledAt DateTime?
+  publishedAt DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  calendar    ContentCalendar[]
+}
+
+model Product {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  type      String
+  url       String
+  price     Float?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ContentCalendar {
+  id        String   @id @default(cuid())
+  userId    String
+  postId    String
+  platform  String
+  date      DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+}
