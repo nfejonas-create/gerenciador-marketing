@@ -45,11 +45,11 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <div className="col-span-2"><h2 className="text-sm font-medium text-blue-400 mb-2">LinkedIn</h2></div>
-        <MetricCard title="Visualizacoes" value={totals('linkedin').views || 0} icon={<Eye size={18} />} platform="linkedin" />
+        <div className="col-span-2"><h2 className="text-sm font-medium text-blue-400 mb-2 flex items-center gap-2">LinkedIn <span className="text-gray-600 text-xs font-normal">(curtidas e comentarios dos ultimos posts · conexoes do perfil)</span></h2></div>
+        <MetricCard title="Conexoes" value={totals('linkedin').followers || 0} icon={<Users size={18} />} platform="linkedin" />
         <MetricCard title="Curtidas" value={totals('linkedin').likes || 0} icon={<ThumbsUp size={18} />} platform="linkedin" />
         <MetricCard title="Comentarios" value={totals('linkedin').comments || 0} icon={<MessageCircle size={18} />} platform="linkedin" />
-        <MetricCard title="Compartilhamentos" value={totals('linkedin').shares || 0} icon={<Share2 size={18} />} platform="linkedin" />
+        <MetricCard title="Posts publicados" value={totals('linkedin').shares || 0} icon={<Share2 size={18} />} platform="linkedin" />
         <div className="col-span-2 mt-2"><h2 className="text-sm font-medium text-indigo-400 mb-2">Facebook</h2></div>
         <MetricCard title="Visualizacoes" value={totals('facebook').views || 0} icon={<Eye size={18} />} platform="facebook" />
         <MetricCard title="Engajamento" value={totals('facebook').likes || 0} icon={<ThumbsUp size={18} />} platform="facebook" />

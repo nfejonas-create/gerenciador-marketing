@@ -73,50 +73,55 @@ export async function syncMetrics(req: AuthRequest, res: Response) {
         }
       }
 
-      if (account.platform === 'linkedin' && account.pageId) {
+      if (account.platform === 'linkedin') {
         try {
-          // Tenta endpoint de perfil pessoal (shares recentes)
           const headers = { Authorization: `Bearer ${account.accessToken}` };
 
-          // Busca shares do perfil pessoal
-          const sharesResp = await axios.get('https://api.linkedin.com/v2/shares', {
+          // 1. Buscar perfil para obter personId
+          const meResp = await axios.get('https://api.linkedin.com/v2/me', { headers });
+          const personId = meResp.data.id;
+
+          // 2. Total de conexoes (unico endpoint de "seguidores" disponivel para perfil pessoal)
+          let connections = 0;
+          const connResp = await axios.get('https://api.linkedin.com/v2/connections', {
+            headers, params: { q: 'viewer', start: 0, count: 0 },
+          }).catch(() => null);
+          connections = connResp?.data?.paging?.total || 0;
+
+          // 3. Posts publicados pelo usuario
+          const postsResp = await axios.get('https://api.linkedin.com/v2/ugcPosts', {
             headers,
-            params: {
-              q: 'owners',
-              owners: `urn:li:person:${account.pageId}`,
-              sortBy: 'LAST_MODIFIED',
-              count: 50,
-            },
+            params: { q: 'authors', authors: `List(urn:li:person:${personId})`, count: 20, sortBy: 'LAST_MODIFIED' },
           }).catch(() => null);
 
+          const posts = postsResp?.data?.elements || [];
           let totalLikes = 0;
           let totalComments = 0;
-          let totalShares = 0;
-          let totalViews = 0;
 
-          if (sharesResp?.data?.elements?.length) {
-            const shares = sharesResp.data.elements;
-            // Para cada share, busca estatisticas sociais
-            for (const share of shares.slice(0, 10)) {
-              const shareUrn = share.id;
-              const statsResp = await axios.get(`https://api.linkedin.com/v2/socialActions/${encodeURIComponent(shareUrn)}`, { headers }).catch(() => null);
-              if (statsResp?.data) {
-                totalLikes += statsResp.data.likesSummary?.totalLikes || 0;
-                totalComments += statsResp.data.commentsSummary?.totalFirstLevelComments || 0;
-              }
-              totalShares++;
-            }
-            totalViews = shares.length * 10; // estimativa proporcional
+          // 4. Para cada post, buscar likes e comentarios
+          for (const post of posts.slice(0, 10)) {
+            const urn = encodeURIComponent(post.id);
+            const [likesResp, commentsResp] = await Promise.all([
+              axios.get(`https://api.linkedin.com/v2/socialActions/${urn}/likes`, { headers, params: { count: 0 } }).catch(() => null),
+              axios.get(`https://api.linkedin.com/v2/socialActions/${urn}/comments`, { headers, params: { count: 0 } }).catch(() => null),
+            ]);
+            totalLikes += likesResp?.data?.paging?.total || 0;
+            totalComments += commentsResp?.data?.paging?.total || 0;
           }
 
           await prisma.metric.create({
             data: {
-              userId: req.userId!, platform: 'linkedin', date: new Date(),
-              views: totalViews, likes: totalLikes,
-              comments: totalComments, shares: totalShares,
+              userId: req.userId!,
+              platform: 'linkedin',
+              date: new Date(),
+              views: 0,
+              likes: totalLikes,
+              comments: totalComments,
+              shares: posts.length,
+              followers: connections,
             },
           });
-          results.push({ platform: 'linkedin', status: 'ok', shares: totalShares });
+          results.push({ platform: 'linkedin', status: 'ok', connections, posts: posts.length, likes: totalLikes, comments: totalComments });
         } catch (err: any) {
           results.push({ platform: 'linkedin', status: 'error', message: err?.message || 'Falha ao buscar metricas do LinkedIn' });
         }
