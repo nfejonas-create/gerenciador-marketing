@@ -1,29 +1,111 @@
+// backend/src/controllers/contentController.ts
 import { Response } from 'express';
 import { PrismaClient } from '@prisma/client';
-import OpenAI from 'openai';
+import Anthropic from '@anthropic-ai/sdk';
 import { AuthRequest } from '../middleware/authGuard';
+import { searchKnowledgeForTopic } from './knowledgeController';
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const pdfParse = require('pdf-parse');
 
 const prisma = new PrismaClient();
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+const HASHTAG_SETS: Record<string, string[]> = {
+  default: ['#ManualDoEletricista', '#Eletricista', '#Eletrica', '#InstalacaoEletrica', '#EletricidadeIndustrial'],
+  automacao: ['#ManualDoEletricista', '#AutomacaoIndustrial', '#Eletricista', '#ArmazenamentoDeGraos', '#AgronegocioBrasil'],
+  motores: ['#ManualDoEletricista', '#MotoresEletricos', '#Eletricista', '#ManutencaoEletrica', '#EletricidadeIndustrial'],
+  sensores: ['#ManualDoEletricista', '#Sensores', '#Eletricista', '#AutomacaoIndustrial', '#InstalacaoEletrica'],
+  protecao: ['#ManualDoEletricista', '#ProtecaoEletrica', '#Eletricista', '#NR10', '#SegurancaEletrica'],
+  comando: ['#ManualDoEletricista', '#CirquitosDeComando', '#Eletricista', '#ContatoresEletricos', '#ManutencaoEletrica'],
+  paineis: ['#ManualDoEletricista', '#PaineisEletricos', '#Eletricista', '#ProjetosEletricos', '#EletricidadeIndustrial'],
+  linkedin: ['#ManualDoEletricista', '#Eletricista', '#MercadoEletrico', '#CarreiraEletricista', '#TecnologiaEletrica'],
+};
+
+function getHashtags(topic: string, platform: string): string[] {
+  const t = topic.toLowerCase();
+  if (platform === 'linkedin') return HASHTAG_SETS.linkedin;
+  if (t.includes('automa') || t.includes('grao') || t.includes('silo')) return HASHTAG_SETS.automacao;
+  if (t.includes('motor')) return HASHTAG_SETS.motores;
+  if (t.includes('sensor') || t.includes('fim de curso') || t.includes('boia')) return HASHTAG_SETS.sensores;
+  if (t.includes('protec') || t.includes('disjuntor') || t.includes('fusivel') || t.includes('nr10')) return HASHTAG_SETS.protecao;
+  if (t.includes('comando') || t.includes('contator') || t.includes('rele')) return HASHTAG_SETS.comando;
+  if (t.includes('painel') || t.includes('quadro')) return HASHTAG_SETS.paineis;
+  return HASHTAG_SETS.default;
+}
+
+const TEMPLATES = {
+  linkedin: `FORMATO OBRIGATORIO - LinkedIn (Manual do Eletricista):
+LINHA 1 (gancho): Frase de 1 linha que provoca, contraria ou afirma algo que todo eletricista ja viveu. NUNCA comece com "Voce sabia".
+[linha em branco]
+PARAGRAFO (contexto, 3-4 linhas): Situacao real de obra ou campo. Tom de conversa entre profissionais.
+[linha em branco]
+PARAGRAFO (virada, 2-3 linhas): O erro comum ou detalhe que faz diferenca na pratica.
+[linha em branco]
+PARAGRAFO (solucao, 2-3 linhas): O que fazer diferente. Baseado em experiencia de campo.
+[linha em branco]
+CTA (1 linha): Mencionar o Manual do Eletricista naturalmente.
+LIMITE: 1300 caracteres.`,
+
+  facebook: `FORMATO OBRIGATORIO - Facebook (Manual do Eletricista):
+LINHA 1: Pergunta direta OU afirmacao que gera identificacao. Curta. Impactante.
+CORPO (4-6 linhas): Situacao pratica, dica rapida ou erro comum. Linguagem de obra.
+ENCERRAMENTO: Convite para comentar ou marcar um colega eletricista.
+LIMITE: 500 caracteres.`,
+};
 
 export async function generatePost(req: AuthRequest, res: Response) {
   try {
-    const { topic, platform, tone, product } = req.body;
-    const prompt = `Crie um post profissional para ${platform || 'LinkedIn'} sobre o seguinte tema: "${topic}".
-${product ? `O post deve promover o produto/servico: "${product}".` : ''}
-Tom desejado: ${tone || 'profissional e engajador'}.
-Inclua:
-1. Texto principal do post (maximo 1300 caracteres para LinkedIn, 500 para Facebook)
-2. CTA (chamada para acao) clara
-3. 5 hashtags relevantes
-Retorne em formato JSON: { "content": "...", "cta": "...", "hashtags": ["..."] }`;
+    const { topic, platform, tone, product, kbIds } = req.body;
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4',
-      messages: [{ role: 'user', content: prompt }],
-      response_format: { type: 'json_object' },
+    let kbContext = '';
+    if (kbIds && Array.isArray(kbIds) && kbIds.length > 0) {
+      const items = await prisma.knowledgeBase.findMany({
+        where: { id: { in: kbIds }, userId: req.userId! },
+        select: { title: true, content: true },
+      });
+      kbContext = items.map(i => `[${i.title}]\n${i.content.substring(0, 2000)}`).join('\n\n---\n\n');
+    } else {
+      kbContext = await searchKnowledgeForTopic(req.userId!, topic);
+    }
+
+    const hashtags = getHashtags(topic, platform || 'linkedin');
+    const template = TEMPLATES[platform as 'linkedin' | 'facebook'] || TEMPLATES.linkedin;
+
+    const systemPrompt = `Voce e o assistente de conteudo do Jonas, criador do Manual do Eletricista.
+Jonas e eletricista industrial e encarregado de obras desde 1997, com especializacao em automacao de armazenagem de graos.
+Ele vende ebooks tecnicos no Hotmart: Vol. 1 (go.hotmart.com/E104935068T) e Vol. 2 (go.hotmart.com/A105044012Q).
+Tom: direto, linguagem de obra, sem academicismo, sem cliches motivacionais.
+Nunca inventar dados tecnicos. Basear-se no material fornecido.`;
+
+    const userPrompt = `${template}
+
+TEMA: ${topic}
+${product ? `PRODUTO A MENCIONAR: ${product}` : ''}
+${tone ? `TOM ADICIONAL: ${tone}` : ''}
+
+${kbContext ? `BASE DE CONHECIMENTO (use estas informacoes como fonte):\n---\n${kbContext}\n---\n` : ''}
+
+HASHTAGS A USAR (cole no final): ${hashtags.join(' ')}
+
+Gere o post no formato exato acima e retorne SOMENTE JSON valido:
+{
+  "content": "texto completo do post com quebras de linha corretas",
+  "cta": "a linha de CTA isolada",
+  "hashtags": ${JSON.stringify(hashtags)}
+}`;
+
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1000,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userPrompt }],
     });
-    const result = JSON.parse(completion.choices[0].message.content || '{}');
+
+    const text = response.content[0].type === 'text' ? response.content[0].text : '{}';
+    const clean = text.replace(/```json|```/g, '').trim();
+    const result = JSON.parse(clean);
+
     return res.json(result);
   } catch (err: any) {
     return res.status(500).json({ error: err.message || 'Erro ao gerar post' });
@@ -32,16 +114,30 @@ Retorne em formato JSON: { "content": "...", "cta": "...", "hashtags": ["..."] }
 
 export async function analyzeContent(req: AuthRequest, res: Response) {
   try {
-    const { content } = req.body;
-    const prompt = `Analise o seguinte conteudo para redes sociais e sugira melhorias:
-"${content}"
-Retorne JSON: { "score": 0-10, "strengths": ["..."], "improvements": ["..."], "rewritten": "..." }`;
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4',
-      messages: [{ role: 'user', content: prompt }],
-      response_format: { type: 'json_object' },
+    const { content, platform = 'linkedin' } = req.body;
+
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1000,
+      messages: [{
+        role: 'user',
+        content: `Analise este post para ${platform} do Manual do Eletricista:
+1. Gancho, 2. Clareza, 3. CTA, 4. Hashtags, 5. Tamanho
+
+POST: "${content}"
+
+Retorne SOMENTE JSON:
+{
+  "score": 0-10,
+  "strengths": ["ponto forte 1"],
+  "improvements": ["melhoria 1"],
+  "rewritten": "versao melhorada se score < 7, senao null"
+}`,
+      }],
     });
-    return res.json(JSON.parse(completion.choices[0].message.content || '{}'));
+
+    const text = response.content[0].type === 'text' ? response.content[0].text : '{}';
+    return res.json(JSON.parse(text.replace(/```json|```/g, '').trim()));
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -50,16 +146,34 @@ Retorne JSON: { "score": 0-10, "strengths": ["..."], "improvements": ["..."], "r
 export async function generateCalendar(req: AuthRequest, res: Response) {
   try {
     const { weeks = 4, platforms = ['linkedin', 'facebook'] } = req.body;
-    const metrics = await prisma.metric.findMany({ where: { userId: req.userId! }, orderBy: { date: 'desc' }, take: 30 });
-    const prompt = `Com base nas seguintes metricas de engajamento: ${JSON.stringify(metrics.slice(0, 10))},
-crie um calendario de postagens para ${weeks} semanas nas plataformas: ${platforms.join(', ')}.
-Retorne JSON: { "calendar": [{ "week": 1, "day": "Segunda", "platform": "linkedin", "topic": "...", "type": "..." }] }`;
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4',
-      messages: [{ role: 'user', content: prompt }],
-      response_format: { type: 'json_object' },
+
+    const kbItems = await prisma.knowledgeBase.findMany({
+      where: { userId: req.userId!, active: true },
+      select: { title: true, tags: true },
+      take: 20,
     });
-    return res.json(JSON.parse(completion.choices[0].message.content || '{}'));
+
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 2000,
+      messages: [{
+        role: 'user',
+        content: `Crie um calendario editorial de ${weeks} semanas para o Manual do Eletricista.
+Plataformas: ${platforms.join(', ')}.
+Materiais: ${kbItems.map(i => i.title).join(', ') || 'conteudo geral de eletricidade industrial'}.
+Cadencia: LinkedIn 3x/semana (Seg, Qua, Sex) + Facebook 5x/semana.
+
+Retorne JSON:
+{
+  "calendar": [
+    { "week": 1, "day": "Segunda", "platform": "linkedin", "topic": "...", "type": "autoridade|dica|erro|cta_ebook" }
+  ]
+}`,
+      }],
+    });
+
+    const text = response.content[0].type === 'text' ? response.content[0].text : '{}';
+    return res.json(JSON.parse(text.replace(/```json|```/g, '').trim()));
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -68,22 +182,32 @@ Retorne JSON: { "calendar": [{ "week": 1, "day": "Segunda", "platform": "linkedi
 export async function analyzeMaterial(req: AuthRequest, res: Response) {
   try {
     const { text, title } = req.body;
-    const prompt = `Analise o seguinte material: "${title || 'Material'}"\n\n${text.substring(0, 3000)}\n\n
-Identifique os principais temas com potencial de engajamento nas redes sociais.
-Retorne JSON: { "themes": [{ "topic": "...", "potential": "alto/medio/baixo", "postIdeas": ["..."] }] }`;
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4',
-      messages: [{ role: 'user', content: prompt }],
-      response_format: { type: 'json_object' },
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1500,
+      messages: [{
+        role: 'user',
+        content: `Analise este material e identifique temas com potencial de engajamento:
+"${title || 'Material'}"\n\n${text.substring(0, 3000)}
+
+Retorne JSON:
+{
+  "themes": [{ "topic": "...", "potential": "alto|medio|baixo", "postIdeas": ["ideia 1"] }]
+}`,
+      }],
     });
-    return res.json(JSON.parse(completion.choices[0].message.content || '{}'));
+    const t = response.content[0].type === 'text' ? response.content[0].text : '{}';
+    return res.json(JSON.parse(t.replace(/```json|```/g, '').trim()));
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
 }
 
 export async function getPosts(req: AuthRequest, res: Response) {
-  const posts = await prisma.post.findMany({ where: { userId: req.userId! }, orderBy: { createdAt: 'desc' } });
+  const posts = await prisma.post.findMany({
+    where: { userId: req.userId! },
+    orderBy: { createdAt: 'desc' },
+  });
   return res.json(posts);
 }
 
@@ -91,10 +215,84 @@ export async function savePost(req: AuthRequest, res: Response) {
   try {
     const { platform, content, cta, hashtags, scheduledAt, status } = req.body;
     const post = await prisma.post.create({
-      data: { userId: req.userId!, platform, content, cta, hashtags: hashtags?.join(' '), status: status || 'draft', scheduledAt: scheduledAt ? new Date(scheduledAt) : null },
+      data: {
+        userId: req.userId!,
+        platform,
+        content,
+        cta,
+        hashtags: Array.isArray(hashtags) ? hashtags.join(' ') : hashtags,
+        status: status || 'draft',
+        scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
+      },
     });
     return res.json(post);
   } catch {
     return res.status(500).json({ error: 'Erro ao salvar post' });
+  }
+}
+
+export async function uploadAndGeneratePosts(req: AuthRequest, res: Response) {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
+
+    const { originalname, mimetype, buffer } = req.file;
+    const { platform = 'linkedin', tone = 'direto, linguagem de obra', quantity = '5' } = req.body;
+
+    let extractedText = '';
+
+    if (mimetype === 'application/pdf') {
+      const parsed = await pdfParse(buffer);
+      extractedText = parsed.text?.substring(0, 8000) || '';
+    } else if (mimetype === 'text/plain') {
+      extractedText = buffer.toString('utf-8').substring(0, 8000);
+    } else if (mimetype.startsWith('image/')) {
+      const base64 = buffer.toString('base64');
+      const visionResp = await anthropic.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: mimetype as 'image/jpeg' | 'image/png' | 'image/webp', data: base64 } },
+            { type: 'text', text: 'Descreva em detalhes este material tecnico eletrico. Se houver texto, transcreva. Se for esquema eletrico, descreva os componentes e conexoes.' },
+          ],
+        }],
+      });
+      extractedText = visionResp.content[0].type === 'text' ? visionResp.content[0].text : '';
+    }
+
+    if (!extractedText.trim()) return res.status(422).json({ error: 'Nao foi possivel extrair conteudo.' });
+
+    const hashtags = getHashtags(extractedText.substring(0, 200), platform);
+    const template = TEMPLATES[platform as 'linkedin' | 'facebook'] || TEMPLATES.linkedin;
+
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 4000,
+      system: `Voce e assistente do Manual do Eletricista. Jonas e eletricista industrial desde 1997. Tom: direto, linguagem de obra.`,
+      messages: [{
+        role: 'user',
+        content: `${template}
+
+Gere exatamente ${quantity} posts para ${platform} com base neste material:
+---
+${extractedText}
+---
+Tom: ${tone}
+Hashtags: ${hashtags.join(' ')}
+
+Retorne SOMENTE JSON:
+{
+  "summary": "resumo do material em 2 frases",
+  "posts": [{ "theme": "nome do tema", "content": "texto completo", "cta": "chamada", "hashtags": ${JSON.stringify(hashtags)} }]
+}`,
+      }],
+    });
+
+    const text = response.content[0].type === 'text' ? response.content[0].text : '{}';
+    const result = JSON.parse(text.replace(/```json|```/g, '').trim());
+    return res.json({ filename: originalname, type: mimetype, extractedLength: extractedText.length, ...result });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
   }
 }

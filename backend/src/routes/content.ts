@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { authGuard } from '../middleware/authGuard';
-import { generatePost, analyzeContent, generateCalendar, getPosts, savePost } from '../controllers/contentController';
-import { uploadMaterial } from '../controllers/uploadController';
+import { generatePost, analyzeContent, generateCalendar, getPosts, savePost, uploadAndGeneratePosts } from '../controllers/contentController';
+import { generatePostImage, generateImageOptions } from '../controllers/imageController';
 import { upload } from '../services/upload';
 import { publishPost } from '../controllers/publishController';
 
@@ -10,7 +10,9 @@ router.use(authGuard);
 router.post('/generate', generatePost);
 router.post('/analyze', analyzeContent);
 router.post('/calendar', generateCalendar);
-router.post('/upload-material', upload.single('file'), uploadMaterial);
+router.post('/upload-material', upload.single('file'), uploadAndGeneratePosts);
+router.post('/generate-image', generatePostImage);
+router.post('/generate-image-options', generateImageOptions);
 router.get('/posts', getPosts);
 router.post('/posts', savePost);
 router.post('/publish', publishPost);

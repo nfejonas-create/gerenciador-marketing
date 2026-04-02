@@ -7,6 +7,7 @@ import Funil from './pages/Funil';
 import Calendario from './pages/Calendario';
 import Configuracoes from './pages/Configuracoes';
 import AuthCallback from './pages/AuthCallback';
+import BaseConhecimento from './pages/BaseConhecimento';
 import Layout from './components/Layout';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -25,6 +26,7 @@ export default function App() {
             <Route index element={<Navigate to="/dashboard" />} />
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="conteudo" element={<Conteudo />} />
+            <Route path="base-conhecimento" element={<BaseConhecimento />} />
             <Route path="funil" element={<Funil />} />
             <Route path="calendario" element={<Calendario />} />
             <Route path="configuracoes" element={<Configuracoes />} />

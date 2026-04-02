@@ -7,8 +7,10 @@ import socialRoutes from './routes/social';
 import metricsRoutes from './routes/metrics';
 import contentRoutes from './routes/content';
 import funnelRoutes from './routes/funnel';
+import knowledgeRoutes from './routes/knowledge';
 import { errorHandler } from './middleware/errorHandler';
 import './services/passport';
+import './services/schedulerService';
 
 dotenv.config();
 
@@ -24,6 +26,7 @@ app.use('/social', socialRoutes);
 app.use('/metrics', metricsRoutes);
 app.use('/content', contentRoutes);
 app.use('/funnel', funnelRoutes);
+app.use('/knowledge', knowledgeRoutes);
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
