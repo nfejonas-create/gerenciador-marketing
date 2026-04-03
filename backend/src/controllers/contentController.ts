@@ -291,6 +291,25 @@ export async function updatePost(req: AuthRequest, res: Response) {
   }
 }
 
+export async function scheduleBatch(req: AuthRequest, res: Response) {
+  try {
+    const { items } = req.body as { items: { postId: string; scheduledAt: string }[] };
+    if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ error: 'Nenhum item enviado' });
+
+    const updates = await Promise.all(
+      items.map(({ postId, scheduledAt }) =>
+        prisma.post.updateMany({
+          where: { id: postId, userId: req.userId! },
+          data: { status: 'scheduled', scheduledAt: new Date(scheduledAt) },
+        })
+      )
+    );
+    return res.json({ scheduled: updates.length, items });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+}
+
 export async function uploadAndGeneratePosts(req: AuthRequest, res: Response) {
   try {
     if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado.' });

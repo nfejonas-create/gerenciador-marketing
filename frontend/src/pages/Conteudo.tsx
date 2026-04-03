@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   Sparkles, Save, Clock, CheckCircle, Upload, FileText, Image as ImageIcon,
-  X, Send, Calendar, ChevronDown, Package, Zap, BookOpen, Star, Target, MessageSquare
+  X, Send, Calendar, ChevronDown, Package, Zap, BookOpen, Star, Target, MessageSquare, Copy, CalendarDays, PlusCircle
 } from 'lucide-react';
 import api from '../services/api';
 
@@ -57,6 +57,20 @@ export default function Conteudo() {
   const [publishing, setPublishing] = useState<string | null>(null);
   const [publishModal, setPublishModal] = useState<{ post: SavedPost } | null>(null);
   const [scheduleDate, setScheduleDate] = useState('');
+  const [copiedPostId, setCopiedPostId] = useState<string | null>(null);
+
+  // Agendamento em lote
+  const [showBatchModal, setShowBatchModal] = useState(false);
+  const [batchStartDate, setBatchStartDate] = useState('');
+  const [batchSelected, setBatchSelected] = useState<string[]>([]);
+  const [schedulingBatch, setSchedulingBatch] = useState(false);
+
+  // Importar post pronto
+  const [importContent, setImportContent] = useState('');
+  const [importCta, setImportCta] = useState('');
+  const [importHashtags, setImportHashtags] = useState('');
+  const [importPlatform, setImportPlatform] = useState('linkedin');
+  const [savingImport, setSavingImport] = useState(false);
 
   useEffect(() => {
     loadProducts();
@@ -92,24 +106,26 @@ export default function Conteudo() {
 
   function buildImagePrompt(style: string): string {
     const t = (topic || generated?.content || '').substring(0, 200).toLowerCase();
-    let subject = 'industrial electrical control panel with organized cables and circuit breakers';
-    if (t.includes('motor')) subject = 'three-phase electric motor in industrial environment, copper windings';
-    else if (t.includes('contator') || t.includes('rele')) subject = 'industrial contactors and relays on DIN rail inside control panel';
-    else if (t.includes('painel') || t.includes('quadro')) subject = 'open industrial electrical panel with busbars and circuit breakers';
-    else if (t.includes('cabo') || t.includes('fiacao')) subject = 'organized industrial cable tray with color-coded wires';
-    else if (t.includes('grao') || t.includes('silo')) subject = 'grain storage silo with industrial electrical automation nearby';
-    else if (t.includes('inversor')) subject = 'variable frequency drive VFD in industrial control cabinet';
-    else if (t.includes('sensor')) subject = 'industrial limit switch and proximity sensors on machinery';
+
+    // Sujeito baseado no tema do post
+    let subject = 'Brazilian electrician man in dark navy polo shirt, smiling confidently, holding a smartphone showing an app, industrial electrical panel with organized circuit breakers in background';
+    if (t.includes('motor')) subject = 'Brazilian electrician technician in navy polo shirt inspecting a large three-phase industrial electric motor, copper windings visible, realistic factory environment';
+    else if (t.includes('contator') || t.includes('rele')) subject = 'Brazilian electrician pointing at industrial contactors and relays mounted on DIN rail inside open control panel, professional pose';
+    else if (t.includes('painel') || t.includes('quadro')) subject = 'Brazilian electrician professional in navy polo shirt working on open industrial electrical panel, busbars and circuit breakers clearly visible';
+    else if (t.includes('cabo') || t.includes('fiacao')) subject = 'Brazilian electrician organizing color-coded electrical wires in cable tray, professional industrial setting, natural lighting';
+    else if (t.includes('grao') || t.includes('silo')) subject = 'Brazilian electrician technician near grain storage silo with industrial automation control box, outdoor realistic scene';
+    else if (t.includes('inversor')) subject = 'Brazilian electrician adjusting variable frequency drive VFD settings on industrial control cabinet display, focused professional expression';
+    else if (t.includes('sensor')) subject = 'Brazilian electrician installing industrial proximity sensor on machinery, realistic factory floor environment';
 
     const styleMap: Record<string, string> = {
-      realista: 'professional industrial photography, photorealistic, dramatic lighting, sharp focus, dark blue and orange palette',
-      ilustrativo: 'digital illustration, technical drawing style, clean lines, dark blue and orange palette, professional',
-      criativo: 'creative conceptual art, dynamic composition, glowing electrical elements, dark dramatic background, orange and blue neon accents',
-      post: 'square 1:1 format, centered composition, professional social media post',
-      story: 'vertical 9:16 format, bold composition, optimized for Instagram Story or Reels',
+      realista: `Photorealistic professional photography, Canon DSLR, natural lighting, shallow depth of field, sharp focus on person. ${subject}. Real photograph look, no illustration, no CGI. Suitable for LinkedIn post.`,
+      ilustrativo: `Digital illustration, technical drawing style, clean lines, dark blue and orange palette, professional infographic feel. ${subject}. No real photograph.`,
+      criativo: `Creative conceptual photography with dramatic lighting, dynamic composition, orange and electric blue accent colors, cinematic look. ${subject}. High contrast, editorial style.`,
+      post: `Square 1:1 format social media photo, centered composition, professional headshot style. ${subject}. Clean background, real photograph, suitable for Instagram or LinkedIn feed post.`,
+      story: `Vertical 9:16 format, bold composition with empty space at top for text overlay. ${subject}. Real photograph style, natural lighting, optimized for Instagram Story or Reels.`,
     };
 
-    return `${styleMap[style]}: ${subject}. No text, no logos, no visible human faces. High quality, suitable for social media.`;
+    return `${styleMap[style]} No watermark, no text overlay, no logos. High quality, photorealistic, suitable for social media marketing.`;
   }
 
   function generateImagePrompt(style: string) {
@@ -186,6 +202,74 @@ export default function Conteudo() {
     try { const { data } = await api.post('/content/analyze', { content: analyzeText }); setAnalysis(data); }
     catch (e: any) { alert(e.response?.data?.error || 'Erro ao analisar'); }
     finally { setLoadingAnalyze(false); }
+  }
+
+  async function copyPostContent(post: SavedPost) {
+    const parts = [post.content, post.cta, post.hashtags].filter(Boolean);
+    await navigator.clipboard.writeText(parts.join('\n\n'));
+    setCopiedPostId(post.id);
+    setTimeout(() => setCopiedPostId(null), 2000);
+  }
+
+  function buildBatchSchedule(): { postId: string; scheduledAt: string }[] {
+    if (!batchStartDate || batchSelected.length === 0) return [];
+    const start = new Date(batchStartDate);
+    const schedule: { postId: string; scheduledAt: string }[] = [];
+    const selectedPosts = posts.filter(p => batchSelected.includes(p.id));
+
+    // Distribui: LinkedIn Seg/Qua/Sex, Facebook Ter/Qui/Sab
+    const dayOffsets: Record<string, number[]> = {
+      linkedin: [0, 2, 4], // Seg, Qua, Sex
+      facebook: [1, 3, 5], // Ter, Qui, Sab
+    };
+
+    const counters: Record<string, number> = { linkedin: 0, facebook: 0 };
+
+    for (const post of selectedPosts) {
+      const plt = post.platform;
+      const offsets = dayOffsets[plt] || [0, 2, 4];
+      const idx = counters[plt] % offsets.length;
+      const weekOffset = Math.floor(counters[plt] / offsets.length) * 7;
+      const d = new Date(start);
+      d.setDate(d.getDate() + offsets[idx] + weekOffset);
+      d.setHours(9, 0, 0, 0);
+      schedule.push({ postId: post.id, scheduledAt: d.toISOString() });
+      counters[plt]++;
+    }
+    return schedule;
+  }
+
+  async function confirmBatchSchedule() {
+    const items = buildBatchSchedule();
+    if (items.length === 0) return alert('Selecione posts e uma data de inicio');
+    setSchedulingBatch(true);
+    try {
+      await api.post('/content/posts/schedule-batch', { items });
+      alert(`${items.length} posts agendados com sucesso!`);
+      setShowBatchModal(false);
+      setBatchSelected([]);
+      setBatchStartDate('');
+      loadPosts();
+    } catch (e: any) { alert(e.response?.data?.error || 'Erro ao agendar em lote'); }
+    finally { setSchedulingBatch(false); }
+  }
+
+  async function saveImportedPost() {
+    if (!importContent.trim()) return alert('Digite o conteudo do post');
+    setSavingImport(true);
+    try {
+      await api.post('/content/posts', {
+        platform: importPlatform,
+        content: importContent,
+        cta: importCta || null,
+        hashtags: importHashtags || null,
+        status: 'draft',
+      });
+      setImportContent(''); setImportCta(''); setImportHashtags('');
+      alert('Post salvo no historico!');
+      if (tab === 'posts') loadPosts();
+    } catch { alert('Erro ao salvar post'); }
+    finally { setSavingImport(false); }
   }
 
   // ---- MODAL PUBLICAR ----
@@ -528,6 +612,43 @@ export default function Conteudo() {
         </div>
       )}
 
+      {/* IMPORTAR POST PRONTO — disponivel em qualquer aba */}
+      {tab === 'upload' && (
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-4">
+          <h2 className="font-semibold text-white flex items-center gap-2"><PlusCircle size={16} className="text-green-400" /> Importar Post Pronto para o Historico</h2>
+          <p className="text-gray-500 text-xs">Cole um post que voce ja escreveu ou editou manualmente para salvar no historico e depois publicar ou agendar.</p>
+          <div>
+            <label className="text-sm text-gray-400 block mb-1">Plataforma</label>
+            <select value={importPlatform} onChange={e => setImportPlatform(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
+              <option value="linkedin">LinkedIn</option>
+              <option value="facebook">Facebook</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-sm text-gray-400 block mb-1">Conteudo do post *</label>
+            <textarea value={importContent} onChange={e => setImportContent(e.target.value)} rows={6}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white resize-none text-sm"
+              placeholder="Cole aqui o texto completo do post..." />
+          </div>
+          <div>
+            <label className="text-sm text-gray-400 block mb-1">CTA (opcional)</label>
+            <input value={importCta} onChange={e => setImportCta(e.target.value)}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
+              placeholder="Ex: Acesse o Manual do Eletricista: go.hotmart.com/..." />
+          </div>
+          <div>
+            <label className="text-sm text-gray-400 block mb-1">Hashtags (opcional)</label>
+            <input value={importHashtags} onChange={e => setImportHashtags(e.target.value)}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
+              placeholder="#ManualDoEletricista #Eletricista" />
+          </div>
+          <button onClick={saveImportedPost} disabled={savingImport || !importContent.trim()}
+            className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white py-3 rounded-xl font-medium transition-colors">
+            <Save size={16} /> {savingImport ? 'Salvando...' : 'Salvar no Historico'}
+          </button>
+        </div>
+      )}
+
       {/* ABA: ANALISAR TEXTO */}
       {tab === 'analyze' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -557,7 +678,70 @@ export default function Conteudo() {
 
       {/* ABA: HISTORICO */}
       {tab === 'posts' && (
-        <div className="space-y-3">
+        <div className="space-y-4">
+          {/* Cabecalho com acoes em lote */}
+          <div className="flex flex-wrap gap-3 items-center justify-between">
+            <p className="text-gray-400 text-sm">{posts.length} post{posts.length !== 1 ? 's' : ''} salvos</p>
+            <div className="flex gap-2">
+              <button onClick={() => setShowBatchModal(true)}
+                className="flex items-center gap-2 bg-purple-700 hover:bg-purple-600 text-white text-sm px-4 py-2 rounded-lg transition-colors">
+                <CalendarDays size={14} /> Agendar semana
+              </button>
+            </div>
+          </div>
+
+          {/* Modal agendamento em lote */}
+          {showBatchModal && (
+            <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+              <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-lg space-y-4 max-h-[80vh] overflow-y-auto">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-white font-semibold text-lg flex items-center gap-2"><CalendarDays size={18} /> Agendar semana</h3>
+                  <button onClick={() => setShowBatchModal(false)} className="text-gray-500 hover:text-gray-300"><X size={18} /></button>
+                </div>
+                <div>
+                  <label className="text-sm text-gray-400 block mb-1">Data de inicio da semana (Segunda-feira)</label>
+                  <input type="date" value={batchStartDate} onChange={e => setBatchStartDate(e.target.value)}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" />
+                </div>
+                <p className="text-xs text-gray-500">LinkedIn: Seg/Qua/Sex as 9h &nbsp;|&nbsp; Facebook: Ter/Qui/Sab as 9h</p>
+                <div className="space-y-2">
+                  <p className="text-sm text-gray-400 font-medium">Selecione os posts (rascunhos):</p>
+                  {posts.filter(p => p.status === 'draft').length === 0 && (
+                    <p className="text-gray-600 text-sm">Nenhum rascunho disponivel.</p>
+                  )}
+                  {posts.filter(p => p.status === 'draft').map(post => (
+                    <label key={post.id} className="flex items-start gap-3 bg-gray-800 rounded-lg p-3 cursor-pointer hover:bg-gray-750">
+                      <input type="checkbox" checked={batchSelected.includes(post.id)}
+                        onChange={e => setBatchSelected(e.target.checked ? [...batchSelected, post.id] : batchSelected.filter(id => id !== post.id))}
+                        className="mt-1 accent-purple-500" />
+                      <div className="flex-1 min-w-0">
+                        <span className={`text-xs px-1.5 py-0.5 rounded mr-2 ${post.platform === 'linkedin' ? 'bg-blue-900 text-blue-300' : 'bg-indigo-900 text-indigo-300'}`}>{post.platform}</span>
+                        <span className="text-gray-300 text-sm line-clamp-2">{post.content}</span>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+                {batchSelected.length > 0 && batchStartDate && (
+                  <div className="bg-gray-800 rounded-lg p-3 space-y-1">
+                    <p className="text-xs text-gray-400 font-medium">Preview do agendamento:</p>
+                    {buildBatchSchedule().map((item, i) => {
+                      const p = posts.find(x => x.id === item.postId);
+                      return (
+                        <p key={i} className="text-xs text-gray-300">
+                          {new Date(item.scheduledAt).toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' })} 09h — <span className={p?.platform === 'linkedin' ? 'text-blue-400' : 'text-indigo-400'}>{p?.platform}</span>: {p?.content.substring(0, 50)}...
+                        </p>
+                      );
+                    })}
+                  </div>
+                )}
+                <button onClick={confirmBatchSchedule} disabled={schedulingBatch || batchSelected.length === 0 || !batchStartDate}
+                  className="w-full flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white py-3 rounded-xl font-medium transition-colors">
+                  <CalendarDays size={16} /> {schedulingBatch ? 'Agendando...' : `Agendar ${batchSelected.length} post(s)`}
+                </button>
+              </div>
+            </div>
+          )}
+
           {posts.length === 0 && <p className="text-gray-500 text-center py-8">Nenhum post salvo ainda.</p>}
           {posts.map(post => (
             <div key={post.id} className="bg-gray-900 border border-gray-800 rounded-xl p-5">
@@ -571,13 +755,18 @@ export default function Conteudo() {
               {post.imageUrl && <img src={post.imageUrl} alt="" className="w-full h-32 object-cover rounded-lg mb-3" />}
               <p className="text-gray-300 text-sm line-clamp-3">{post.content}</p>
               {post.cta && <p className="text-blue-400 text-xs mt-2">{post.cta}</p>}
-              {post.status !== 'published' && (
-                <button
-                  onClick={() => setPublishModal({ post })}
-                  className="mt-3 flex items-center gap-2 bg-green-700 hover:bg-green-600 text-white text-sm px-4 py-2 rounded-lg transition-colors">
-                  <Send size={14} /> Publicar / Agendar
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button onClick={() => copyPostContent(post)}
+                  className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg transition-colors ${copiedPostId === post.id ? 'bg-green-700 text-green-200' : 'bg-gray-700 hover:bg-gray-600 text-gray-300'}`}>
+                  <Copy size={13} /> {copiedPostId === post.id ? '✓ Copiado!' : 'Copiar'}
                 </button>
-              )}
+                {post.status !== 'published' && (
+                  <button onClick={() => setPublishModal({ post })}
+                    className="flex items-center gap-1.5 bg-green-700 hover:bg-green-600 text-white text-sm px-3 py-1.5 rounded-lg transition-colors">
+                    <Send size={13} /> Publicar / Agendar
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>
