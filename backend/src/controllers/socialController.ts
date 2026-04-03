@@ -22,12 +22,36 @@ export async function connectLinkedIn(req: AuthRequest, res: Response) {
 export async function connectFacebook(req: AuthRequest, res: Response) {
   try {
     const { accessToken, pageId, pageName } = req.body;
+
+    // Troca o token de curta duracao (~2h) por token de longa duracao (~60 dias)
+    let longLivedToken = accessToken;
+    const appId = process.env.FACEBOOK_APP_ID;
+    const appSecret = process.env.FACEBOOK_APP_SECRET;
+
+    if (appId && appSecret) {
+      try {
+        const exchangeRes = await axios.get('https://graph.facebook.com/v19.0/oauth/access_token', {
+          params: {
+            grant_type: 'fb_exchange_token',
+            client_id: appId,
+            client_secret: appSecret,
+            fb_exchange_token: accessToken,
+          },
+        });
+        longLivedToken = exchangeRes.data.access_token || accessToken;
+        console.log('[Facebook] Token trocado por versao de longa duracao (~60 dias)');
+      } catch (exchangeErr: any) {
+        // Se o exchange falhar (ex: token ja e de pagina/longa duracao), usa o original
+        console.warn('[Facebook] Exchange de token nao realizado, usando token original:', exchangeErr?.response?.data?.error?.message || exchangeErr.message);
+      }
+    }
+
     const account = await prisma.socialAccount.upsert({
       where: { userId_platform: { userId: req.userId!, platform: 'facebook' } },
-      update: { accessToken, pageId, pageName },
-      create: { userId: req.userId!, platform: 'facebook', accessToken, pageId, pageName },
+      update: { accessToken: longLivedToken, pageId, pageName },
+      create: { userId: req.userId!, platform: 'facebook', accessToken: longLivedToken, pageId, pageName },
     });
-    return res.json(account);
+    return res.json({ ...account, tokenUpgraded: longLivedToken !== accessToken });
   } catch {
     return res.status(500).json({ error: 'Erro ao conectar Facebook' });
   }
