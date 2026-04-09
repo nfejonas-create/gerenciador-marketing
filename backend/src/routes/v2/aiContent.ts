@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { authGuard } from '../middleware/authGuard';
-import { generateWithFallback, generateBatchWithFallback } from '../services/multiAIService';
+import { authGuard } from '../../middleware/authGuard';
+import { generateWithFallback, generateBatchWithFallback } from '../../services/multiAIService';
 import { 
   getDailyStrategy, 
   generateStrategyPrompt,
@@ -9,11 +9,11 @@ import {
   STRUCTURES,
   CTAS,
   ContentStrategy 
-} from '../lib/contentStrategy';
+} from '../../lib/contentStrategy';
 import { 
   getWeeklyStrategy, 
   WEEK_DAYS
-} from '../lib/weeklyStrategies';
+} from '../../lib/weeklyStrategies';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -238,7 +238,7 @@ router.post('/regenerate', authGuard, async (req, res) => {
       return res.status(404).json({ error: 'Conteúdo não encontrado' });
     }
     
-    const posts = weeklyContent.posts as WeekPost[];
+    const posts = weeklyContent.posts as unknown as WeekPost[];
     const postToRegenerate = posts[dayIndex];
     
     if (!postToRegenerate) {
@@ -308,7 +308,7 @@ router.put('/update-post', authGuard, async (req, res) => {
       return res.status(404).json({ error: 'Conteúdo não encontrado' });
     }
     
-    const posts = weeklyContent.posts as WeekPost[];
+    const posts = weeklyContent.posts as unknown as WeekPost[];
     
     if (posts[dayIndex]) {
       posts[dayIndex] = {
@@ -437,7 +437,7 @@ router.get('/weekly-content/:id', authGuard, async (req, res) => {
 // GET /api/v2/health - Health check dos providers de IA
 router.get('/health', async (req, res) => {
   try {
-    const { checkAIProvidersHealth } = await import('../services/multiAIService');
+    const { checkAIProvidersHealth } = await import('../../services/multiAIService');
     const health = await checkAIProvidersHealth();
     
     res.json({
