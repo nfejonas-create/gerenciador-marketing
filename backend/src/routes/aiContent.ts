@@ -1,6 +1,6 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { authGuard } from '../middleware/authGuard';
+import { authGuard, AuthRequest } from '../middleware/authGuard';
 import { 
   generateWeeklyContent, 
   generateSinglePost,
@@ -14,10 +14,10 @@ const router = Router();
 const prisma = new PrismaClient();
 
 // POST /api/ai/generate-week - Gera conteúdo para uma semana
-router.post('/generate-week', authGuard, async (req, res) => {
+router.post('/generate-week', authGuard, async (req: AuthRequest, res: Response) => {
   try {
     const { theme, tone, platform } = req.body;
-    const userId = req.user!.id;
+    const userId = req.userId!;
     
     if (!theme || !tone || !platform) {
       return res.status(400).json({ 
@@ -70,10 +70,10 @@ router.post('/generate-week', authGuard, async (req, res) => {
 });
 
 // POST /api/ai/generate-single - Gera post individual
-router.post('/generate-single', authGuard, async (req, res) => {
+router.post('/generate-single', authGuard, async (req: AuthRequest, res: Response) => {
   try {
     const { theme, tone, platform, strategyType } = req.body;
-    const userId = req.user!.id;
+    const userId = req.userId!;
     
     if (!theme || !tone || !platform) {
       return res.status(400).json({ 
@@ -109,10 +109,10 @@ router.post('/generate-single', authGuard, async (req, res) => {
 });
 
 // POST /api/ai/regenerate - Regenera um post específico
-router.post('/regenerate', authGuard, async (req, res) => {
+router.post('/regenerate', authGuard, async (req: AuthRequest, res: Response) => {
   try {
     const { weeklyContentId, dayIndex, theme, tone, feedback } = req.body;
-    const userId = req.user!.id;
+    const userId = req.userId!;
     
     const weeklyContent = await prisma.weeklyContent.findFirst({
       where: { id: weeklyContentId, userId }
@@ -122,7 +122,7 @@ router.post('/regenerate', authGuard, async (req, res) => {
       return res.status(404).json({ error: 'Conteúdo não encontrado' });
     }
     
-    const posts = weeklyContent.posts as WeekPost[];
+    const posts = (weeklyContent.posts as any) as WeekPost[];
     const postToRegenerate = posts[dayIndex];
     
     if (!postToRegenerate) {
@@ -158,10 +158,10 @@ router.post('/regenerate', authGuard, async (req, res) => {
 });
 
 // PUT /api/ai/update-post - Atualiza um post específico
-router.put('/update-post', authGuard, async (req, res) => {
+router.put('/update-post', authGuard, async (req: AuthRequest, res: Response) => {
   try {
     const { weeklyContentId, dayIndex, content, status, scheduledTime } = req.body;
-    const userId = req.user!.id;
+    const userId = req.userId!;
     
     const weeklyContent = await prisma.weeklyContent.findFirst({
       where: { id: weeklyContentId, userId }
@@ -171,7 +171,7 @@ router.put('/update-post', authGuard, async (req, res) => {
       return res.status(404).json({ error: 'Conteúdo não encontrado' });
     }
     
-    const posts = weeklyContent.posts as WeekPost[];
+    const posts = (weeklyContent.posts as any) as WeekPost[];
     
     if (posts[dayIndex]) {
       posts[dayIndex] = {
@@ -201,10 +201,10 @@ router.put('/update-post', authGuard, async (req, res) => {
 });
 
 // POST /api/ai/schedule - Agenda posts aprovados
-router.post('/schedule', authGuard, async (req, res) => {
+router.post('/schedule', authGuard, async (req: AuthRequest, res: Response) => {
   try {
     const { weeklyContentId, posts } = req.body;
-    const userId = req.user!.id;
+    const userId = req.userId!;
     
     const scheduledPosts = [];
     
@@ -246,9 +246,9 @@ router.post('/schedule', authGuard, async (req, res) => {
 });
 
 // GET /api/ai/weekly-content - Lista conteúdos semanais do usuário
-router.get('/weekly-content', authGuard, async (req, res) => {
+router.get('/weekly-content', authGuard, async (req: AuthRequest, res: Response) => {
   try {
-    const userId = req.user!.id;
+    const userId = req.userId!;
     
     const weeklyContents = await prisma.weeklyContent.findMany({
       where: { userId },
@@ -268,10 +268,10 @@ router.get('/weekly-content', authGuard, async (req, res) => {
 });
 
 // GET /api/ai/weekly-content/:id - Detalhes de um conteúdo semanal
-router.get('/weekly-content/:id', authGuard, async (req, res) => {
+router.get('/weekly-content/:id', authGuard, async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const userId = req.user!.id;
+    const userId = req.userId!;
     
     const weeklyContent = await prisma.weeklyContent.findFirst({
       where: { id, userId }
@@ -294,7 +294,7 @@ router.get('/weekly-content/:id', authGuard, async (req, res) => {
 });
 
 // POST /api/ai/suggest-improvements - Sugere melhorias para um post
-router.post('/suggest-improvements', authGuard, async (req, res) => {
+router.post('/suggest-improvements', authGuard, async (req: AuthRequest, res: Response) => {
   try {
     const { content } = req.body;
     
@@ -317,7 +317,7 @@ router.post('/suggest-improvements', authGuard, async (req, res) => {
 });
 
 // POST /api/ai/adapt-facebook - Adapta conteúdo do LinkedIn para Facebook
-router.post('/adapt-facebook', authGuard, async (req, res) => {
+router.post('/adapt-facebook', authGuard, async (req: AuthRequest, res: Response) => {
   try {
     const { content } = req.body;
     
