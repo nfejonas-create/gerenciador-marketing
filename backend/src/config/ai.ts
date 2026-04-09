@@ -1,6 +1,6 @@
 // Configuração centralizada da API Anthropic
 export const AI_CONFIG = {
-  model: 'claude-3-sonnet-20240229',
+  model: 'claude-3-5-sonnet-20241022',
   maxTokens: 1000,
   timeout: 25000, // 25s por chamada
 };
