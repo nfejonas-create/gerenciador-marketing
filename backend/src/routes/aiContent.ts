@@ -10,18 +10,27 @@ import {
   WeekPost
 } from '../services/aiGenerator';
 
+import { v4 as uuidv4 } from 'uuid';
+
 const router = Router();
 const prisma = new PrismaClient();
 
 // POST /api/ai/generate-week - Gera conteúdo para uma semana
 router.post('/generate-week', authGuard, async (req: AuthRequest, res: Response) => {
+  const requestId = uuidv4();
+  const startTime = Date.now();
+  
   try {
     const { theme, tone, platform } = req.body;
     const userId = req.userId!;
     
+    console.log(`[${requestId}] Iniciando geração - User: ${userId}`);
+    
     if (!theme || !tone || !platform) {
+      console.warn(`[${requestId}] Validação falhou: campos obrigatórios`);
       return res.status(400).json({ 
-        error: 'Tema, tom e plataforma são obrigatórios' 
+        error: 'Tema, tom e plataforma são obrigatórios',
+        requestId
       });
     }
     
@@ -32,6 +41,8 @@ router.post('/generate-week', authGuard, async (req: AuthRequest, res: Response)
       orderBy: { createdAt: 'desc' }
     });
     
+    console.log(`[${requestId}] Base de conhecimento: ${knowledgeBase.length} itens`);
+    
     const knowledgeContent = knowledgeBase.map(k => k.content);
     
     // Gera posts da semana
@@ -41,7 +52,7 @@ router.post('/generate-week', authGuard, async (req: AuthRequest, res: Response)
       platform,
       userId,
       knowledgeBase: knowledgeContent
-    });
+    }, requestId);
     
     // Salva no banco como rascunho
     const weeklyContent = await prisma.weeklyContent.create({
@@ -55,16 +66,26 @@ router.post('/generate-week', authGuard, async (req: AuthRequest, res: Response)
       }
     });
     
+    const duration = Date.now() - startTime;
+    const successCount = weekPosts.filter(p => !p.content.includes('Erro ao gerar')).length;
+    
+    console.log(`[${requestId}] Concluído em ${duration}ms - ${successCount}/${weekPosts.length} posts`);
+    
     res.json({
       success: true,
+      requestId,
       weeklyContentId: weeklyContent.id,
       weekPosts,
       message: 'Conteúdo gerado com sucesso!'
     });
-  } catch (error) {
-    console.error('Erro ao gerar conteúdo semanal:', error);
+  } catch (error: any) {
+    const duration = Date.now() - startTime;
+    console.error(`[${requestId}] Erro após ${duration}ms:`, error.message, error.stack);
+    
     res.status(500).json({ 
-      error: 'Erro ao gerar conteúdo. Tente novamente.' 
+      error: 'Erro ao gerar conteúdo. Tente novamente.',
+      requestId,
+      code: error.code || 'UNKNOWN'
     });
   }
 });
