@@ -33,19 +33,19 @@ export interface WeeklyContent {
   createdAt: string;
 }
 
-// Gera conteúdo para uma semana completa
+// Gera conteúdo para uma semana completa - USA API V2 (Multi-IA)
 export async function generateWeeklyContent(params: GenerateWeeklyParams) {
-  const response = await api.post('/ai/generate-week', params);
+  const response = await api.post('/api/v2/generate-week', params);
   return response.data;
 }
 
-// Gera um post individual
+// Gera um post individual - USA API V2
 export async function generateSinglePost(params: GenerateSingleParams) {
-  const response = await api.post('/ai/generate-single', params);
+  const response = await api.post('/api/v2/generate-single', params);
   return response.data;
 }
 
-// Regenera um post específico
+// Regenera um post específico - USA API V2
 export async function regeneratePost(
   weeklyContentId: string,
   dayIndex: number,
@@ -53,7 +53,7 @@ export async function regeneratePost(
   tone: string,
   feedback?: string
 ) {
-  const response = await api.post('/ai/regenerate', {
+  const response = await api.post('/api/v2/regenerate', {
     weeklyContentId,
     dayIndex,
     theme,
@@ -63,7 +63,7 @@ export async function regeneratePost(
   return response.data;
 }
 
-// Atualiza um post específico
+// Atualiza um post específico - USA API V2
 export async function updatePost(
   weeklyContentId: string,
   dayIndex: number,
@@ -73,7 +73,7 @@ export async function updatePost(
     scheduledTime?: string;
   }
 ) {
-  const response = await api.put('/ai/update-post', {
+  const response = await api.put('/api/v2/update-post', {
     weeklyContentId,
     dayIndex,
     ...updates
@@ -81,7 +81,7 @@ export async function updatePost(
   return response.data;
 }
 
-// Agenda posts aprovados
+// Agenda posts aprovados - USA API V2
 export async function schedulePosts(
   weeklyContentId: string,
   posts: Array<{
@@ -93,33 +93,21 @@ export async function schedulePosts(
     platform: string;
   }>
 ) {
-  const response = await api.post('/ai/schedule', {
+  const response = await api.post('/api/v2/schedule', {
     weeklyContentId,
     posts
   });
   return response.data;
 }
 
-// Lista conteúdos semanais do usuário
+// Lista conteúdos semanais do usuário - USA API V2
 export async function getWeeklyContents(): Promise<WeeklyContent[]> {
-  const response = await api.get('/ai/weekly-content');
+  const response = await api.get('/api/v2/weekly-content');
   return response.data.weeklyContents;
 }
 
-// Busca detalhes de um conteúdo semanal
+// Busca detalhes de um conteúdo semanal - USA API V2
 export async function getWeeklyContent(id: string): Promise<WeeklyContent> {
-  const response = await api.get(`/ai/weekly-content/${id}`);
+  const response = await api.get(`/api/v2/weekly-content/${id}`);
   return response.data.weeklyContent;
-}
-
-// Sugere melhorias para um post
-export async function suggestImprovements(content: string): Promise<string[]> {
-  const response = await api.post('/ai/suggest-improvements', { content });
-  return response.data.suggestions;
-}
-
-// Adapta conteúdo do LinkedIn para Facebook
-export async function adaptToFacebook(content: string): Promise<string> {
-  const response = await api.post('/ai/adapt-facebook', { content });
-  return response.data.content;
 }
