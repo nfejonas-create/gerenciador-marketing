@@ -9,6 +9,7 @@ import contentRoutes from './routes/content';
 import funnelRoutes from './routes/funnel';
 import knowledgeRoutes from './routes/knowledge';
 import aiContentRoutes from './routes/aiContent';
+import aiV2Routes from './routes/v2/aiContent';
 import { errorHandler } from './middleware/errorHandler';
 import './services/passport';
 import './services/schedulerService';
@@ -21,7 +22,9 @@ const PORT = process.env.PORT || 3001;
 const allowedOrigins = [
   process.env.FRONTEND_URL || 'http://localhost:5173',
   'https://frontend-six-lemon-74.vercel.app',
-  'http://localhost:5173'
+  'https://frontend-pgxuttb3b-jonas-breitenbachs-projects.vercel.app',
+  'http://localhost:5173',
+  'http://localhost:3000'
 ];
 
 app.use(cors({ 
@@ -45,6 +48,7 @@ app.use('/content', contentRoutes);
 app.use('/funnel', funnelRoutes);
 app.use('/knowledge', knowledgeRoutes);
 app.use('/api/ai', aiContentRoutes);
+app.use('/api/v2', aiV2Routes);
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
