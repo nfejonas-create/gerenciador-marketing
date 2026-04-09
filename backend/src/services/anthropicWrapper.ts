@@ -5,12 +5,12 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-export async function callAnthropic(prompt: string, retries = 2) {
+export async function callAnthropic(prompt: string, maxTokens?: number, retries = 2) {
   for (let i = 0; i <= retries; i++) {
     try {
       const response = await anthropic.messages.create({
         model: AI_CONFIG.model,
-        max_tokens: AI_CONFIG.maxTokens,
+        max_tokens: maxTokens || AI_CONFIG.maxTokens,
         messages: [{ role: 'user', content: prompt }],
       });
       return response;

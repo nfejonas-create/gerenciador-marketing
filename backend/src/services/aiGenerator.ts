@@ -1,4 +1,3 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { 
   getDailyStrategy, 
   generateStrategyPrompt,
@@ -13,10 +12,8 @@ import {
   WEEK_DAYS,
   SUGGESTED_TIMES 
 } from '../lib/weeklyStrategies';
-
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+import { callAnthropic } from './anthropicWrapper';
+import { AI_CONFIG } from '../config/ai';
 
 export interface WeekPost {
   day: string;
@@ -36,10 +33,12 @@ export interface GenerateWeeklyParams {
   knowledgeBase?: string[];
 }
 
-// Gera conteúdo para uma semana completa
-export async function generateWeeklyContent(params: GenerateWeeklyParams, requestId?: string): Promise<WeekPost[]> {
+// Gera conteúdo para uma semana completa - PARALELO
+export async function generateWeeklyContent(
+  params: GenerateWeeklyParams,
+  requestId?: string
+): Promise<WeekPost[]> {
   const { theme, tone, platform, knowledgeBase } = params;
-  const weekPosts: WeekPost[] = [];
   
   // Define plataformas a gerar
   const platforms = platform === 'both' ? ['linkedin', 'facebook'] : [platform];
@@ -48,6 +47,9 @@ export async function generateWeeklyContent(params: GenerateWeeklyParams, reques
     console.log(`[${requestId}] Iniciando geração para ${platforms.length} plataforma(s)`);
   }
   
+  // Cria array de promises para execução paralela
+  const generationPromises: Promise<WeekPost>[] = [];
+  
   for (const plat of platforms) {
     const strategy = getWeeklyStrategy(plat as 'linkedin' | 'facebook');
     
@@ -55,53 +57,77 @@ export async function generateWeeklyContent(params: GenerateWeeklyParams, reques
       const dayStrategy = strategy[day];
       if (!dayStrategy) continue;
       
-      const contentStrategy = getDailyStrategy(plat as 'linkedin' | 'facebook', day);
-      const prompt = generateStrategyPrompt(contentStrategy, theme, tone);
-      
-      // Adiciona contexto da base de conhecimento se disponível
-      const knowledgeContext = knowledgeBase && knowledgeBase.length > 0 
-        ? `\n\nUse como referência este conteúdo da base de conhecimento:\n${knowledgeBase.slice(0, 3).join('\n---\n')}`
-        : '';
-      
-      try {
-        const response = await anthropic.messages.create({
-          model: 'claude-3-sonnet-20240229',
-          max_tokens: 1000,
-          messages: [{
-            role: 'user',
-            content: `${prompt}${knowledgeContext}\n\nGere o post completo em português do Brasil.`
-          }]
-        });
-        
-        const content = response.content[0].type === 'text' 
-          ? response.content[0].text 
-          : 'Erro ao gerar conteúdo';
-        
-        weekPosts.push({
-          day,
-          dayLabel: getDayLabel(day),
-          content: content.trim(),
-          strategy: dayStrategy.label,
-          suggestedTime: dayStrategy.time,
-          status: 'pending',
-          platform: plat
-        });
-      } catch (error) {
-        console.error(`Erro ao gerar post para ${day}:`, error);
-        weekPosts.push({
-          day,
-          dayLabel: getDayLabel(day),
-          content: `Erro ao gerar conteúdo para ${day}. Tente gerar novamente.`,
-          strategy: dayStrategy.label,
-          suggestedTime: dayStrategy.time,
-          status: 'pending',
-          platform: plat
-        });
-      }
+      // Cria promise para cada dia
+      const promise = generateSingleDayParallel(
+        plat, day, theme, tone, knowledgeBase, dayStrategy, requestId
+      );
+      generationPromises.push(promise);
     }
   }
   
+  if (requestId) {
+    console.log(`[${requestId}] Total de posts a gerar: ${generationPromises.length}`);
+  }
+  
+  // Executa TODAS em paralelo - reduz tempo de 35-70s para ~8s
+  const weekPosts = await Promise.all(generationPromises);
+  
+  if (requestId) {
+    const successCount = weekPosts.filter(p => !p.content.includes('Erro ao gerar')).length;
+    console.log(`[${requestId}] Concluído: ${successCount}/${weekPosts.length} posts gerados`);
+  }
+  
   return weekPosts;
+}
+
+// Gera um único dia - usado no paralelo
+async function generateSingleDayParallel(
+  plat: string,
+  day: string,
+  theme: string,
+  tone: string,
+  knowledgeBase: string[] | undefined,
+  dayStrategy: any,
+  requestId?: string
+): Promise<WeekPost> {
+  try {
+    const contentStrategy = getDailyStrategy(plat as 'linkedin' | 'facebook', day);
+    const prompt = generateStrategyPrompt(contentStrategy, theme, tone);
+    
+    const knowledgeContext = knowledgeBase && knowledgeBase.length > 0 
+      ? `\n\nUse como referência este conteúdo da base de conhecimento:\n${knowledgeBase.slice(0, 3).join('\n---\n')}`
+      : '';
+    
+    // Usa o wrapper com retry e modelo correto
+    const response = await callAnthropic(
+      `${prompt}${knowledgeContext}\n\nGere o post completo em português do Brasil.`
+    );
+    
+    const content = response.content[0].type === 'text' 
+      ? response.content[0].text 
+      : 'Erro ao gerar conteúdo';
+    
+    return {
+      day,
+      dayLabel: getDayLabel(day),
+      content: content.trim(),
+      strategy: dayStrategy.label,
+      suggestedTime: dayStrategy.time,
+      status: 'pending',
+      platform: plat
+    };
+  } catch (error) {
+    console.error(`[${requestId}] Erro ao gerar ${day}-${plat}:`, error);
+    return {
+      day,
+      dayLabel: getDayLabel(day),
+      content: `⚠️ Erro ao gerar conteúdo para ${day}. Clique em "Regenerar" para tentar novamente.`,
+      strategy: dayStrategy.label,
+      suggestedTime: dayStrategy.time,
+      status: 'pending',
+      platform: plat
+    };
+  }
 }
 
 // Gera um post individual
@@ -126,14 +152,9 @@ export async function generateSinglePost(
     ? `\n\nUse como referência:\n${knowledgeBase.slice(0, 3).join('\n---\n')}`
     : '';
   
-  const response = await anthropic.messages.create({
-    model: 'claude-3-5-sonnet-20241022',
-    max_tokens: 1000,
-    messages: [{
-      role: 'user',
-      content: `${prompt}${knowledgeContext}\n\nGere o post completo em português do Brasil.`
-    }]
-  });
+  const response = await callAnthropic(
+    `${prompt}${knowledgeContext}\n\nGere o post completo em português do Brasil.`
+  );
   
   return response.content[0].type === 'text' 
     ? response.content[0].text.trim() 
@@ -142,12 +163,7 @@ export async function generateSinglePost(
 
 // Adapta conteúdo do LinkedIn para Facebook
 export async function generateFacebookVariant(linkedinContent: string): Promise<string> {
-  const response = await anthropic.messages.create({
-    model: 'claude-3-5-sonnet-20241022',
-    max_tokens: 1000,
-    messages: [{
-      role: 'user',
-      content: `Adapte o seguinte post do LinkedIn para o Facebook, tornando-o mais casual, com mais emojis, e mais conversacional:
+  const prompt = `Adapte o seguinte post do LinkedIn para o Facebook, tornando-o mais casual, com mais emojis, e mais conversacional:
 
 POST ORIGINAL:
 ${linkedinContent}
@@ -158,9 +174,9 @@ INSTRUÇÕES:
 3. Adicione emojis relevantes
 4. Faça perguntas para engajar
 5. Use frases mais curtas
-6. Total: 100-200 palavras`
-    }]
-  });
+6. Total: 100-200 palavras`;
+
+  const response = await callAnthropic(prompt);
   
   return response.content[0].type === 'text' 
     ? response.content[0].text.trim() 
@@ -184,14 +200,7 @@ export async function regeneratePost(
   prompt += `\n\nGere uma NOVA VERSÃO diferente do post anterior.`;
   
   try {
-    const response = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 1000,
-      messages: [{
-        role: 'user',
-        content: prompt
-      }]
-    });
+    const response = await callAnthropic(prompt);
     
     const content = response.content[0].type === 'text' 
       ? response.content[0].text.trim() 
@@ -224,19 +233,14 @@ function getDayLabel(day: string): string {
 
 // Sugere melhorias para um post
 export async function suggestImprovements(content: string): Promise<string[]> {
-  const response = await anthropic.messages.create({
-    model: 'claude-3-5-sonnet-20241022',
-    max_tokens: 500,
-    messages: [{
-      role: 'user',
-      content: `Analise este post e sugira 3 melhorias específicas para aumentar engajamento:
+  const prompt = `Analise este post e sugira 3 melhorias específicas para aumentar engajamento:
 
 POST:
 ${content}
 
-Responda apenas com as 3 sugestões, uma por linha.`
-    }]
-  });
+Responda apenas com as 3 sugestões, uma por linha.`;
+
+  const response = await callAnthropic(prompt, 500);
   
   if (response.content[0].type === 'text') {
     return response.content[0].text.split('\n').filter(s => s.trim()).slice(0, 3);
