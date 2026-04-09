@@ -42,6 +42,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(passport.initialize());
 
 app.use('/auth', authRoutes);
+app.use('/api/auth', authRoutes);
 app.use('/social', socialRoutes);
 app.use('/metrics', metricsRoutes);
 app.use('/content', contentRoutes);
