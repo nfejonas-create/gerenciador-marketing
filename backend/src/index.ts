@@ -8,6 +8,7 @@ import metricsRoutes from './routes/metrics';
 import contentRoutes from './routes/content';
 import funnelRoutes from './routes/funnel';
 import knowledgeRoutes from './routes/knowledge';
+import aiContentRoutes from './routes/aiContent';
 import { errorHandler } from './middleware/errorHandler';
 import './services/passport';
 import './services/schedulerService';
@@ -27,6 +28,7 @@ app.use('/metrics', metricsRoutes);
 app.use('/content', contentRoutes);
 app.use('/funnel', funnelRoutes);
 app.use('/knowledge', knowledgeRoutes);
+app.use('/api/ai', aiContentRoutes);
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 

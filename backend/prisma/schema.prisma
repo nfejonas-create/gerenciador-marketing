@@ -24,6 +24,8 @@ model User {
   products       Product[]
   calendar       ContentCalendar[]
   knowledgeBase  KnowledgeBase[]
+  weeklyContents WeeklyContent[]
+  scheduledPosts ScheduledPost[]
 }
 
 model SocialAccount {
@@ -107,4 +109,30 @@ model KnowledgeBase {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model WeeklyContent {
+  id        String   @id @default(cuid())
+  theme     String
+  tone      String
+  platform  String
+  posts     Json
+  userId    String
+  status    String   @default("draft")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ScheduledPost {
+  id              String    @id @default(cuid())
+  content         String
+  platform        String
+  scheduledAt     DateTime
+  status          String    @default("pending")
+  weeklyContentId String?
+  userId          String
+  createdAt       DateTime  @default(now())
+  publishedAt     DateTime?
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
