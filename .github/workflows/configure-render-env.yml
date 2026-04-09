@@ -1,0 +1,132 @@
+name: Configure Render Environment
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to configure'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+jobs:
+  configure-env:
+    runs-on: ubuntu-latest
+    name: Configure ANTHROPIC_API_KEY on Render
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          
+      - name: Configure ANTHROPIC_API_KEY on Render
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          echo "🚀 Configurando ANTHROPIC_API_KEY no Render..."
+          
+          # Criar script de configuração
+          cat > configure-render.js << 'EOF'
+          const https = require('https');
+          
+          const RENDER_API_KEY = process.env.RENDER_API_KEY;
+          const SERVICE_ID = process.env.RENDER_SERVICE_ID;
+          const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
+          
+          if (!RENDER_API_KEY || !SERVICE_ID || !ANTHROPIC_KEY) {
+            console.error('❌ Erro: Variáveis de ambiente não configuradas');
+            console.error('RENDER_API_KEY:', RENDER_API_KEY ? '✅' : '❌');
+            console.error('RENDER_SERVICE_ID:', SERVICE_ID ? '✅' : '❌');
+            console.error('ANTHROPIC_API_KEY:', ANTHROPIC_KEY ? '✅' : '❌');
+            process.exit(1);
+          }
+          
+          const options = {
+            hostname: 'api.render.com',
+            path: `/v1/services/${SERVICE_ID}/env-vars/ANTHROPIC_API_KEY`,
+            method: 'PUT',
+            headers: {
+              'Authorization': `Bearer ${RENDER_API_KEY}`,
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            }
+          };
+          
+          const data = JSON.stringify({ value: ANTHROPIC_KEY });
+          
+          const req = https.request(options, (res) => {
+            let responseData = '';
+            
+            console.log(`📡 Status: ${res.statusCode}`);
+            
+            res.on('data', (chunk) => {
+              responseData += chunk;
+            });
+            
+            res.on('end', () => {
+              if (res.statusCode === 200 || res.statusCode === 201) {
+                console.log('✅ ANTHROPIC_API_KEY configurada com sucesso!');
+                console.log('📋 Resposta:', responseData);
+                process.exit(0);
+              } else if (res.statusCode === 404) {
+                console.error('❌ Serviço não encontrado. Verifique o RENDER_SERVICE_ID');
+                process.exit(1);
+              } else if (res.statusCode === 401) {
+                console.error('❌ API Key inválida. Verifique o RENDER_API_KEY');
+                process.exit(1);
+              } else {
+                console.error(`❌ Erro ${res.statusCode}:`, responseData);
+                process.exit(1);
+              }
+            });
+          });
+          
+          req.on('error', (e) => {
+            console.error('❌ Erro na requisição:', e.message);
+            process.exit(1);
+          });
+          
+          req.write(data);
+          req.end();
+          EOF
+          
+          # Executar script
+          node configure-render.js
+          
+      - name: Trigger Deploy
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+        run: |
+          echo "🔄 Acionando deploy no Render..."
+          
+          curl -X POST \
+            "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys" \
+            -H "Authorization: Bearer ${RENDER_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d '{}' \
+            --silent | head -c 500
+          
+          echo ""
+          echo "✅ Deploy acionado! Verifique o dashboard do Render."
+          
+      - name: Summary
+        run: |
+          echo "## ✅ Configuração Concluída!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Variável:** ANTHROPIC_API_KEY" >> $GITHUB_STEP_SUMMARY
+          echo "- **Serviço:** ${{ secrets.RENDER_SERVICE_ID }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Deploy:** Acionado automaticamente" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Próximos passos:" >> $GITHUB_STEP_SUMMARY
+          echo "1. Aguarde o deploy completar no Render Dashboard" >> $GITHUB_STEP_SUMMARY
+          echo "2. Teste a geração de conteúdo em: https://frontend-six-lemon-74.vercel.app" >> $GITHUB_STEP_SUMMARY

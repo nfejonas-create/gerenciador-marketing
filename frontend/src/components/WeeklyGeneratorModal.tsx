@@ -90,7 +90,7 @@ export function WeeklyGeneratorModal({
               value={theme}
               onChange={(e) => setTheme(e.target.value)}
               placeholder="Ex: Marketing Digital, Vendas, Produtividade..."
-              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all"
+              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all text-gray-900"
               disabled={isLoading}
             />
             <p className="mt-1 text-xs text-gray-500">
