@@ -37,12 +37,16 @@ export interface GenerateWeeklyParams {
 }
 
 // Gera conteúdo para uma semana completa
-export async function generateWeeklyContent(params: GenerateWeeklyParams): Promise<WeekPost[]> {
+export async function generateWeeklyContent(params: GenerateWeeklyParams, requestId?: string): Promise<WeekPost[]> {
   const { theme, tone, platform, knowledgeBase } = params;
   const weekPosts: WeekPost[] = [];
   
   // Define plataformas a gerar
   const platforms = platform === 'both' ? ['linkedin', 'facebook'] : [platform];
+  
+  if (requestId) {
+    console.log(`[${requestId}] Iniciando geração para ${platforms.length} plataforma(s)`);
+  }
   
   for (const plat of platforms) {
     const strategy = getWeeklyStrategy(plat as 'linkedin' | 'facebook');
