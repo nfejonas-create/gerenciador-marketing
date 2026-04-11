@@ -1,0 +1,15 @@
+[build]
+  base    = "manual-eletricista"
+  command = "npm run build"
+  publish = "dist"
+
+[functions]
+  directory = "netlify/functions"
+
+[functions."scheduler"]
+  schedule = "*/15 * * * *"
+
+[[redirects]]
+  from   = "/api/*"
+  to     = "/.netlify/functions/:splat"
+  status = 200
