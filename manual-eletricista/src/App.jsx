@@ -52,11 +52,13 @@ const CATEGORIES = ["Lançamento App", "Educativo", "Dor do cliente", "CLP/Autom
 
 // ── API CALLS ─────────────────────────────────────────────────────────────
 async function claudeAPI(system, userMsg, history = []) {
+  const key = ls.get("ak", "");
+  if (!key) throw new Error("Configure sua chave Anthropic na aba ⚙️ Config");
   const messages = [...history.slice(-8), { role: "user", content: userMsg }];
   const res = await fetch("/api/claude", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1500, system, messages }),
+    body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1500, system, messages, _apiKey: key }),
   });
   const data = await res.json();
   if (data.error) throw new Error(data.error?.message || JSON.stringify(data.error));
@@ -67,7 +69,7 @@ async function postLinkedIn(text) {
   const res = await fetch("/api/linkedin", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, _liToken: ls.get("lt", ""), _liUrn: ls.get("lu", "") }),
   });
   return res.json();
 }
@@ -603,7 +605,7 @@ const DashboardPage = () => {
   const Stat = ({ label, val, color }) => (
     <div style={{ background: c.bg3, border: `1px solid ${c.border}`, borderRadius: 10, padding: "14px 16px" }}>
       <div style={{ color: c.muted, fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", marginBottom: 4 }}>{label}</div>
-      <div style={{ color: color || c.amber, fontSize: 22, fontWeight: 800, fontFamily: "monospace" }}>{val || "—"}</div>
+      <div style={{ color: color || c.amber, fontSize: 22, fontWeight: 800, fontFamily: "monospace" }}>{val ?? "—"}</div>
     </div>
   );
 
@@ -618,7 +620,7 @@ const DashboardPage = () => {
   );
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16, overflowY: "auto" }}>
+    <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16, paddingBottom: 20 }}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 }}>
         <Stat label="Posts Gerados" val={local.length} color={c.blue} />
         <Stat label="Publicados" val={local.filter(p => p.status === "publicado").length} color={c.green} />
@@ -664,8 +666,30 @@ const ConfigPage = () => {
   const [lt, setLt] = useState(ls.get("lt", ""));
   const [lu, setLu] = useState(ls.get("lu", ""));
   const [saved, setSaved] = useState(false);
+  const [fetchingUrn, setFetchingUrn] = useState(false);
+  const [urnMsg, setUrnMsg] = useState("");
 
   const save = () => { ls.set("ak", ak); ls.set("lt", lt); ls.set("lu", lu); setSaved(true); setTimeout(() => setSaved(false), 2500); };
+
+  const buscarUrn = async () => {
+    if (!lt) { setUrnMsg("⚠️ Cole o LinkedIn Token primeiro"); return; }
+    setFetchingUrn(true); setUrnMsg("");
+    try {
+      const res = await fetch("/api/linkedin-me", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ _liToken: lt }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setLu(data.urn); ls.set("lu", data.urn);
+        setUrnMsg("✅ URN encontrado: " + data.urn + " (" + data.nome + ")");
+      } else {
+        setUrnMsg("❌ " + (data.error || "Erro ao buscar URN"));
+      }
+    } catch (e) { setUrnMsg("❌ " + e.message); }
+    setFetchingUrn(false);
+  };
 
   const F = ({ label, value, onChange, link, linkLabel }) => (
     <div style={{ marginBottom: 14 }}>
@@ -676,17 +700,23 @@ const ConfigPage = () => {
   );
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16, overflowY: "auto" }}>
+    <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16, paddingBottom: 20 }}>
       <Card>
         <div style={{ fontWeight: 700, fontSize: 15, color: c.text, marginBottom: 4 }}>🔑 Configurações de API</div>
         <div style={{ color: c.muted, fontSize: 12, marginBottom: 18 }}>Salvas localmente no navegador.</div>
         <F label="Anthropic API Key *" value={ak} onChange={setAk} link="https://console.anthropic.com/settings/keys" linkLabel="Pegar em console.anthropic.com" />
         <F label="LinkedIn Access Token" value={lt} onChange={setLt} link="https://www.linkedin.com/developers/apps" linkLabel="linkedin.com/developers → Auth → OAuth tokens" />
-        <F label="LinkedIn Author URN" value={lu} onChange={setLu} />
-        <div style={{ background: c.bg3, borderRadius: 8, padding: 12, marginBottom: 14, fontSize: 12, color: c.muted, lineHeight: 1.8 }}>
-          Como pegar o URN: acesse <a href="https://api.linkedin.com/v2/me" target="_blank" style={{ color: c.blue }}>api.linkedin.com/v2/me</a> → copie o <code style={{ color: c.amber }}>id</code> → URN = <code style={{ color: c.amber }}>urn:li:person:SEU_ID</code>
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ color: c.muted, fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>LINKEDIN AUTHOR URN</div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+            <input type="text" value={lu} onChange={e => setLu(e.target.value)} placeholder="urn:li:person:..." style={{ flex: 1, background: c.bg3, border: "1px solid " + c.border, borderRadius: 8, padding: "10px 13px", color: c.text, fontSize: 13, fontFamily: "monospace", outline: "none" }} />
+            <button onClick={buscarUrn} disabled={fetchingUrn} style={{ background: c.blue, color: "#fff", border: "none", borderRadius: 8, padding: "0 14px", fontSize: 12, fontWeight: 700, cursor: fetchingUrn ? "default" : "pointer", whiteSpace: "nowrap", opacity: fetchingUrn ? 0.7 : 1 }}>
+              {fetchingUrn ? "⟳ Buscando..." : "🔍 Buscar URN"}
+            </button>
+          </div>
+          {urnMsg && <div style={{ fontSize: 12, padding: "8px 10px", background: c.bg3, borderRadius: 6, color: urnMsg.startsWith("✅") ? c.green : c.red }}>{urnMsg}</div>}
         </div>
-        <Btn onClick={save} color={saved ? c.green : c.blue} icon={saved ? "✓" : "💾"}>{saved ? "Salvo!" : "Salvar Configurações"}</Btn>
+        <Btn onClick={save} color={saved ? c.green : c.blue} icon={saved ? "✓" : "💾"} full>{saved ? "✅ Salvo!" : "Salvar Configurações"}</Btn>
       </Card>
 
       <Card>

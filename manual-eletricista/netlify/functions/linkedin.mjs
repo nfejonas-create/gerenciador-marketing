@@ -8,10 +8,10 @@ const CORS = {
 export default async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
   try {
-    const { text } = await req.json();
-    const token = Netlify.env.get("LINKEDIN_ACCESS_TOKEN");
-    const urn   = Netlify.env.get("LINKEDIN_AUTHOR_URN");
-    if (!token || !urn) return new Response(JSON.stringify({ error: "LinkedIn não configurado. Adicione LINKEDIN_ACCESS_TOKEN e LINKEDIN_AUTHOR_URN nas variáveis de ambiente do Netlify." }), { status: 400, headers: CORS });
+    const { text, _liToken, _liUrn } = await req.json();
+    const token = Netlify.env.get("LINKEDIN_ACCESS_TOKEN") || _liToken;
+    const urn   = Netlify.env.get("LINKEDIN_AUTHOR_URN") || _liUrn;
+    if (!token || !urn) return new Response(JSON.stringify({ error: "LinkedIn não configurado. Vá em Config e salve Token e URN." }), { status: 400, headers: CORS });
     const res = await fetch("https://api.linkedin.com/v2/ugcPosts", {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "X-Restli-Protocol-Version": "2.0.0" },
