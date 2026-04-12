@@ -639,7 +639,7 @@ export default function Conteudo() {
                       <Save size={14} /> Salvar rascunho
                     </button>
                   </div>
-                  <div className="bg-gray-800 rounded-lg p-4">
+                  <div className="bg-gray-800 rounded-lg p-4 max-h-64 overflow-y-auto">
                     <p className="text-gray-200 whitespace-pre-wrap text-sm">{generated.content}</p>
                   </div>
                   {generated.cta && (

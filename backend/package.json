@@ -25,6 +25,7 @@
     "passport-google-oauth20": "^2.0.0",
     "passport-linkedin-oauth2": "^2.0.0",
     "pdf-parse": "^2.4.5",
+    "pg": "^8.20.0",
     "zod": "^3.22.4"
   },
   "devDependencies": {

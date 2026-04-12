@@ -59,7 +59,17 @@ export async function connectFacebook(req: AuthRequest, res: Response) {
 
 export async function getSocialAccounts(req: AuthRequest, res: Response) {
   const accounts = await prisma.socialAccount.findMany({ where: { userId: req.userId! } });
-  return res.json(accounts.map(a => ({ platform: a.platform, pageId: a.pageId, pageName: a.pageName, connected: true })));
+  return res.json(accounts.map(a => ({
+    platform: a.platform,
+    pageId: a.pageId,
+    pageName: a.pageName,
+    // Token mascarado para exibicao (primeiros 8 chars + ...)
+    accessTokenPreview: a.accessToken ? a.accessToken.substring(0, 8) + '...' : '',
+    // Token completo para preencher o campo (so retorna se existir)
+    accessToken: a.accessToken || '',
+    connected: !!(a.accessToken && a.accessToken.length > 10),
+    updatedAt: a.updatedAt,
+  })));
 }
 
 export async function syncMetrics(req: AuthRequest, res: Response) {

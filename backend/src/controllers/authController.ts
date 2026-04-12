@@ -34,6 +34,22 @@ export async function login(req: Request, res: Response) {
   }
 }
 
+export async function getSettings(req: AuthRequest, res: Response) {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.userId! }, select: { settings: true } });
+    return res.json(user?.settings || {});
+  } catch { return res.status(500).json({ error: 'Erro ao buscar configuracoes' }); }
+}
+
+export async function updateSettings(req: AuthRequest, res: Response) {
+  try {
+    const current = await prisma.user.findUnique({ where: { id: req.userId! }, select: { settings: true } });
+    const merged = { ...(current?.settings as object || {}), ...req.body };
+    await prisma.user.update({ where: { id: req.userId! }, data: { settings: merged } });
+    return res.json(merged);
+  } catch { return res.status(500).json({ error: 'Erro ao salvar configuracoes' }); }
+}
+
 export async function getMe(req: AuthRequest, res: Response) {
   const user = await prisma.user.findUnique({ where: { id: req.userId }, select: { id: true, email: true, name: true, avatar: true, provider: true } });
   return res.json(user);

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import passport from 'passport';
-import { register, login, getMe } from '../controllers/authController';
+import { register, login, getMe, getSettings, updateSettings } from '../controllers/authController';
 import { authGuard } from '../middleware/authGuard';
 
 const router = Router();
@@ -8,6 +8,8 @@ const router = Router();
 router.post('/register', register);
 router.post('/login', login);
 router.get('/me', authGuard, getMe);
+router.get('/settings', authGuard, getSettings);
+router.put('/settings', authGuard, updateSettings);
 
 if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
   router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'], session: false }));
