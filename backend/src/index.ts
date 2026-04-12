@@ -10,6 +10,12 @@ import funnelRoutes from './routes/funnel';
 import knowledgeRoutes from './routes/knowledge';
 import aiContentRoutes from './routes/aiContent';
 import aiV2Routes from './routes/v2/aiContent';
+import v3ContentRoutes from './routes/v3/content';
+import v3PostsRoutes from './routes/v3/posts';
+import v3WeekRoutes from './routes/v3/week';
+import ideasRoutes from './routes/ideas';
+import settingsRoutes from './routes/settings';
+import analyticsRoutes from './routes/analytics';
 import { errorHandler } from './middleware/errorHandler';
 import './services/passport';
 import './services/schedulerService';
@@ -50,6 +56,12 @@ app.use('/funnel', funnelRoutes);
 app.use('/knowledge', knowledgeRoutes);
 app.use('/api/ai', aiContentRoutes);
 app.use('/api/v2', aiV2Routes);
+app.use('/api/v3/content', v3ContentRoutes);
+app.use('/api/v3/posts', v3PostsRoutes);
+app.use('/api/v3/week', v3WeekRoutes);
+app.use('/api/ideas', ideasRoutes);
+app.use('/api/settings', settingsRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 

@@ -2,7 +2,6 @@ import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// Configuração das APIs
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
@@ -13,254 +12,249 @@ const openai = new OpenAI({
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
-// Tipos
-export interface AIProvider {
-  name: 'claude' | 'openai' | 'gemini';
-  generate: (prompt: string, maxTokens?: number) => Promise<string>;
+interface GenerateOptions {
+  theme: string;
+  tone: string;
+  platform: 'LINKEDIN' | 'FACEBOOK' | 'BOTH';
+  instructions?: string;
+  context?: string;
 }
 
-export interface GenerationResult {
+interface GenerateResult {
   content: string;
-  provider: string;
+  providerUsed: string;
+  provider?: string;
   success: boolean;
+  latencyMs?: number;
   error?: string;
-  latencyMs: number;
 }
 
-// Configurações
-const AI_CONFIG = {
-  claude: {
-    model: 'claude-3-5-sonnet-20241022',
-    maxTokens: 1000,
-    timeoutMs: 15000,
-  },
-  openai: {
-    model: 'gpt-4-turbo-preview',
-    maxTokens: 1000,
-    timeoutMs: 15000,
-  },
-  gemini: {
-    model: 'gemini-pro',
-    maxTokens: 1000,
-    timeoutMs: 15000,
-  },
+const PLATFORM_LIMITS = {
+  LINKEDIN: 1300,
+  FACEBOOK: 2000,
+  BOTH: 1300,
 };
 
-// Provider: Claude
-async function generateWithClaude(prompt: string, maxTokens: number = 1000): Promise<string> {
-  const response = await anthropic.messages.create({
-    model: AI_CONFIG.claude.model,
-    max_tokens: maxTokens,
-    messages: [{ role: 'user', content: prompt }],
-  });
+function buildPrompt(options: GenerateOptions): string {
+  const { theme, tone, platform, instructions, context } = options;
+  const maxChars = PLATFORM_LIMITS[platform];
 
-  if (response.content[0].type === 'text') {
-    return response.content[0].text;
-  }
-  throw new Error('Resposta inválida do Claude');
+  const basePrompt = `Você é um especialista em marketing digital para eletricistas.
+
+TEMA: ${theme}
+TOM DE VOZ: ${tone}
+PLATAFORMA: ${platform}
+MÁXIMO DE CARACTERES: ${maxChars}
+
+ESTRUTURA DO POST (use obrigatoriamente):
+1. GANCHO (Hook viral) - Primeira linha que prende atenção
+2. QUEBRA - Quebra de expectativa ou curiosidade
+3. DOR - Problema que o leitor enfrenta
+4. AGITA - Intensifica a dor com consequências
+5. SOLUÇÃO - Como resolver o problema
+6. PROVA - Dado, case ou exemplo real
+7. CTA (Call to Action) - O que o leitor deve fazer
+
+ESTRATÉGIAS DE HOOKS (escolha uma):
+- Confession: "Errei por 3 anos antes de descobrir..."
+- Curiosity Gap: "O que os grandes eletricistas não te contam..."
+- Contrarian: "Por que NÃO usar o método tradicional..."
+- Data-driven: "98% dos eletricistas cometem esse erro..."
+
+REGRAS:
+- Máximo ${maxChars} caracteres
+- Use 3-5 hashtags relevantes no final
+- Linguagem profissional mas acessível
+- Foco em valor real para o leitor
+- Evite jargões excessivos
+${instructions ? `\nINSTRUÇÕES ADICIONAIS:\n${instructions}` : ''}
+${context ? `\nCONTEXTO DA BASE DE CONHECIMENTO:\n${context}` : ''}
+
+Gere APENAS o texto do post, sem explicações adicionais.`;
+
+  return basePrompt;
 }
 
-// Provider: OpenAI
-async function generateWithOpenAI(prompt: string, maxTokens: number = 1000): Promise<string> {
-  const response = await openai.chat.completions.create({
-    model: AI_CONFIG.openai.model,
-    max_tokens: maxTokens,
-    messages: [{ role: 'user', content: prompt }],
-  });
+async function tryClaude(prompt: string, maxChars: number): Promise<string | null> {
+  try {
+    const response = await anthropic.messages.create({
+      model: 'claude-3-5-sonnet-20241022',
+      max_tokens: 1500,
+      temperature: 0.7,
+      messages: [{ role: 'user', content: prompt }],
+    });
 
-  return response.choices[0]?.message?.content || '';
-}
-
-// Provider: Gemini
-async function generateWithGemini(prompt: string, maxTokens: number = 1000): Promise<string> {
-  const model = genAI.getGenerativeModel({ model: AI_CONFIG.gemini.model });
-  const result = await model.generateContent(prompt);
-  return result.response.text();
-}
-
-// Função com timeout
-async function withTimeout<T>(
-  promise: Promise<T>,
-  timeoutMs: number,
-  providerName: string
-): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error(`${providerName} timeout`)), timeoutMs)
-    ),
-  ]);
-}
-
-// Tenta um provider com retry
-async function tryProvider(
-  provider: 'claude' | 'openai' | 'gemini',
-  prompt: string,
-  maxTokens: number,
-  retries: number = 2
-): Promise<GenerationResult> {
-  const startTime = Date.now();
-  
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      let content: string;
-      
-      switch (provider) {
-        case 'claude':
-          content = await withTimeout(
-            generateWithClaude(prompt, maxTokens),
-            AI_CONFIG.claude.timeoutMs,
-            'Claude'
-          );
-          break;
-        case 'openai':
-          content = await withTimeout(
-            generateWithOpenAI(prompt, maxTokens),
-            AI_CONFIG.openai.timeoutMs,
-            'OpenAI'
-          );
-          break;
-        case 'gemini':
-          content = await withTimeout(
-            generateWithGemini(prompt, maxTokens),
-            AI_CONFIG.gemini.timeoutMs,
-            'Gemini'
-          );
-          break;
-        default:
-          throw new Error('Provider desconhecido');
-      }
-
-      return {
-        content,
-        provider,
-        success: true,
-        latencyMs: Date.now() - startTime,
-      };
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
-      console.warn(`[${provider}] Tentativa ${attempt}/${retries} falhou:`, errorMsg);
-      
-      if (attempt === retries) {
-        return {
-          content: '',
-          provider,
-          success: false,
-          error: errorMsg,
-          latencyMs: Date.now() - startTime,
-        };
-      }
-      
-      // Espera antes de retry (exponential backoff)
-      await new Promise(r => setTimeout(r, attempt * 1000));
+    const content = response.content[0].type === 'text' 
+      ? response.content[0].text 
+      : '';
+    
+    if (content.length <= maxChars + 100) {
+      return content;
     }
+    return content.substring(0, maxChars);
+  } catch (error) {
+    console.log('Claude failed:', error);
+    return null;
+  }
+}
+
+async function tryOpenAI(prompt: string, maxChars: number): Promise<string | null> {
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 1500,
+      temperature: 0.7,
+    });
+
+    const content = response.choices[0]?.message?.content || '';
+    
+    if (content.length <= maxChars + 100) {
+      return content;
+    }
+    return content.substring(0, maxChars);
+  } catch (error) {
+    console.log('OpenAI failed:', error);
+    return null;
+  }
+}
+
+async function tryGemini(prompt: string, maxChars: number): Promise<string | null> {
+  try {
+    const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
+    const result = await model.generateContent(prompt);
+    const content = result.response.text();
+    
+    if (content.length <= maxChars + 100) {
+      return content;
+    }
+    return content.substring(0, maxChars);
+  } catch (error) {
+    console.log('Gemini failed:', error);
+    return null;
+  }
+}
+
+export async function generatePost(options: GenerateOptions): Promise<GenerateResult> {
+  const prompt = buildPrompt(options);
+  const maxChars = PLATFORM_LIMITS[options.platform];
+
+  // Try Claude first
+  let content = await tryClaude(prompt, maxChars);
+  if (content) {
+    return { content, providerUsed: 'claude', success: true };
+  }
+
+  // Fallback to OpenAI
+  content = await tryOpenAI(prompt, maxChars);
+  if (content) {
+    return { content, providerUsed: 'openai', success: true };
+  }
+
+  // Fallback to Gemini
+  content = await tryGemini(prompt, maxChars);
+  if (content) {
+    return { content, providerUsed: 'gemini', success: true };
   }
 
   return {
     content: '',
-    provider,
+    providerUsed: 'none',
     success: false,
-    error: 'Todas as tentativas falharam',
-    latencyMs: Date.now() - startTime,
+    error: 'All AI providers failed',
   };
 }
 
-// Gera conteúdo com fallback entre providers
-export async function generateWithFallback(
+export async function generateWeekPosts(
+  themes: string[],
+  options: Omit<GenerateOptions, 'theme'>
+): Promise<GenerateResult[]> {
+  const promises = themes.map(theme => 
+    generatePost({ ...options, theme })
+  );
+
+  return Promise.all(promises);
+}
+
+// Alias para compatibilidade com rotas v2
+export function generateWithFallback(
   prompt: string,
-  maxTokens: number = 1000,
-  requestId?: string
-): Promise<GenerationResult> {
-  const providers: ('claude' | 'openai' | 'gemini')[] = ['claude', 'openai', 'gemini'];
-  
-  if (requestId) {
-    console.log(`[${requestId}] Iniciando geração com fallback`);
-  }
+  _timeout?: number,
+  _requestId?: string
+): Promise<GenerateResult> {
+  return generatePost({
+    theme: prompt,
+    tone: 'mix',
+    platform: 'LINKEDIN',
+  });
+}
 
-  for (const provider of providers) {
-    const result = await tryProvider(provider, prompt, maxTokens);
-    
-    if (result.success) {
-      if (requestId) {
-        console.log(`[${requestId}] Sucesso com ${provider} em ${result.latencyMs}ms`);
-      }
-      return result;
-    }
-    
-    if (requestId) {
-      console.log(`[${requestId}] ${provider} falhou, tentando próximo...`);
-    }
-  }
+export function generateBatchWithFallback(
+  items: { day: string; platform: string; prompt: string }[],
+  _timeout?: number,
+  _requestId?: string
+): Promise<GenerateResult[]> {
+  const themes = items.map(i => i.prompt);
+  const promises = themes.map(theme => 
+    generatePost({ theme, tone: 'mix', platform: 'LINKEDIN' })
+  );
+  return Promise.all(promises);
+}
 
-  // Todos falharam
-  const error = 'Todos os providers de IA falharam';
-  if (requestId) {
-    console.error(`[${requestId}] ${error}`);
-  }
-  
+export async function checkAIProvidersHealth(): Promise<{ claude: boolean; openai: boolean; gemini: boolean }> {
   return {
-    content: '',
-    provider: 'none',
-    success: false,
-    error,
-    latencyMs: 0,
+    claude: !!process.env.ANTHROPIC_API_KEY,
+    openai: !!process.env.OPENAI_API_KEY,
+    gemini: !!process.env.GEMINI_API_KEY,
   };
 }
 
-// Gera múltiplos posts em paralelo com fallback
-export async function generateBatchWithFallback(
-  prompts: { day: string; platform: string; prompt: string }[],
-  maxTokens: number = 1000,
-  requestId?: string
-): Promise<GenerationResult[]> {
-  if (requestId) {
-    console.log(`[${requestId}] Iniciando geração em lote: ${prompts.length} posts`);
-  }
+export async function analyzePlatform(url: string): Promise<{
+  followers: number;
+  views: number;
+  shares: number;
+  likes: number;
+  comments: number;
+  sales: number;
+  analysis: string;
+}> {
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'system',
+          content: 'Você é um analista de métricas de redes sociais. Analise a URL fornecida e retorne métricas estimadas e uma análise de desempenho.'
+        },
+        {
+          role: 'user',
+          content: `Analise esta página/perfil e retorne:\n1. Número estimado de seguidores\n2. Visualizações médias por post\n3. Compartilhamentos médios\n4. Curtidas médias\n5. Comentários médios\n6. Uma análise de desempenho em português\n\nURL: ${url}\n\nResponda em JSON com os campos: followers, views, shares, likes, comments, analysis`
+        }
+      ],
+      response_format: { type: 'json_object' },
+    });
 
-  // Gera todos em paralelo
-  const promises = prompts.map(async ({ day, platform, prompt }) => {
-    const result = await generateWithFallback(prompt, maxTokens, `${requestId}-${day}`);
+    const result = JSON.parse(response.choices[0]?.message?.content || '{}');
+    
     return {
-      ...result,
-      day,
-      platform,
+      followers: result.followers || 0,
+      views: result.views || 0,
+      shares: result.shares || 0,
+      likes: result.likes || 0,
+      comments: result.comments || 0,
+      sales: result.sales || 0,
+      analysis: result.analysis || 'Análise não disponível',
     };
-  });
-
-  const results = await Promise.all(promises);
-
-  const successCount = results.filter(r => r.success).length;
-  if (requestId) {
-    console.log(`[${requestId}] Lote concluído: ${successCount}/${prompts.length} sucessos`);
+  } catch (error) {
+    console.log('Analytics analysis failed:', error);
+    return {
+      followers: 0,
+      views: 0,
+      shares: 0,
+      likes: 0,
+      comments: 0,
+      sales: 0,
+      analysis: 'Não foi possível analisar a URL no momento.',
+    };
   }
-
-  return results;
-}
-
-// Verifica quais providers estão disponíveis
-export function getAvailableProviders(): string[] {
-  const available: string[] = [];
-  
-  if (process.env.ANTHROPIC_API_KEY) available.push('claude');
-  if (process.env.OPENAI_API_KEY) available.push('openai');
-  if (process.env.GEMINI_API_KEY) available.push('gemini');
-  
-  return available;
-}
-
-// Health check de todos os providers
-export async function checkAIProvidersHealth(): Promise<Record<string, boolean>> {
-  const health: Record<string, boolean> = {};
-  
-  const checks = [
-    { name: 'claude', check: !!process.env.ANTHROPIC_API_KEY },
-    { name: 'openai', check: !!process.env.OPENAI_API_KEY },
-    { name: 'gemini', check: !!process.env.GEMINI_API_KEY },
-  ];
-  
-  for (const { name, check } of checks) {
-    health[name] = check;
-  }
-  
-  return health;
 }

@@ -349,18 +349,17 @@ router.post('/schedule', authGuard, async (req, res) => {
     for (const post of posts) {
       if (post.status === 'approved' && post.scheduledDate && post.scheduledTime) {
         // Cria scheduled post
-        const scheduledPost = await prisma.scheduledPost.create({
+        const scheduled = await prisma.post.create({
           data: {
+            userId,
             content: post.content,
             platform: post.platform,
+            status: 'scheduled',
             scheduledAt: new Date(post.scheduledDate + 'T' + post.scheduledTime),
-            weeklyContentId,
-            userId,
-            status: 'pending'
-          }
+          },
         });
         
-        scheduledPosts.push(scheduledPost);
+        scheduledPosts.push(scheduled);
       }
     }
     

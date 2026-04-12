@@ -25,7 +25,9 @@ model User {
   calendar       ContentCalendar[]
   knowledgeBase  KnowledgeBase[]
   weeklyContents WeeklyContent[]
-  scheduledPosts ScheduledPost[]
+  ideas          Idea[]
+  generatorSettings GeneratorSettings?
+  analyticsSnapshots AnalyticsSnapshot[]
 }
 
 model SocialAccount {
@@ -63,6 +65,7 @@ model Post {
   content     String
   cta         String?
   hashtags    String?
+  category    String?
   status      String          @default("draft")
   scheduledAt DateTime?
   publishedAt DateTime?
@@ -124,15 +127,46 @@ model WeeklyContent {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-model ScheduledPost {
-  id              String    @id @default(cuid())
-  content         String
-  platform        String
-  scheduledAt     DateTime
-  status          String    @default("pending")
-  weeklyContentId String?
-  userId          String
-  createdAt       DateTime  @default(now())
-  publishedAt     DateTime?
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+model Idea {
+  id          String   @id @default(cuid())
+  userId      String
+  hook        String
+  breakText   String
+  pain        String
+  agitate     String
+  solution    String
+  proof       String
+  cta         String
+  category    String?
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model GeneratorSettings {
+  id            String  @id @default(cuid())
+  userId        String  @unique
+  instructions  String  @default("Gere conteúdo profissional para eletricistas. Use tom técnico mas acessível. Máximo 1300 caracteres para LinkedIn.")
+  tone          String  @default("mix")
+  linkedinUrl   String?
+  facebookUrl   String?
+  siteUrl       String?
+  otherUrl      String?
+  linkedinToken String?
+  facebookToken String?
+  user          User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AnalyticsSnapshot {
+  id            String   @id @default(cuid())
+  userId        String
+  platform      String
+  followers     Int      @default(0)
+  views         Int      @default(0)
+  shares        Int      @default(0)
+  likes         Int      @default(0)
+  comments      Int      @default(0)
+  sales         Int      @default(0)
+  snapshotDate  DateTime @default(now())
+  analysisText  String?  @db.Text
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
