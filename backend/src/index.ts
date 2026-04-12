@@ -63,6 +63,10 @@ app.use('/api/ideas', ideasRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/analytics', analyticsRoutes);
 
+// Compatibilidade: rotas antigas do frontend apontam para v3
+app.use('/api/content/generate', v3ContentRoutes);
+app.use('/api/content/posts', v3PostsRoutes);
+
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
 app.use(errorHandler);
