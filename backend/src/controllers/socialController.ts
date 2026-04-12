@@ -9,23 +9,57 @@ export async function connectLinkedIn(req: AuthRequest, res: Response) {
   try {
     const { accessToken, pageId, pageName } = req.body;
 
-    // Auto-busca o Member ID do LinkedIn se não fornecido
-    let resolvedPageId = pageId;
-    let resolvedPageName = pageName;
+    let resolvedPageId = pageId?.trim() || '';
+    let resolvedPageName = pageName?.trim() || 'LinkedIn';
 
-    if (!resolvedPageId || resolvedPageId.trim() === '') {
-      try {
-        const profileRes = await axios.get('https://api.linkedin.com/v2/me', {
-          headers: { Authorization: `Bearer ${accessToken}` },
+    // Tenta obter o Member ID automaticamente via introspecção do token
+    if (!resolvedPageId) {
+      const clientId = process.env.LINKEDIN_CLIENT_ID;
+      const clientSecret = process.env.LINKEDIN_CLIENT_SECRET;
+
+      // Método 1: Introspecção do token (usa client credentials, não precisa de r_liteprofile)
+      if (clientId && clientSecret) {
+        try {
+          const introspectRes = await axios.post(
+            'https://api.linkedin.com/v2/introspectToken',
+            new URLSearchParams({
+              client_id: clientId,
+              client_secret: clientSecret,
+              token: accessToken,
+            }).toString(),
+            { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+          );
+          // authorizedUser vem como "urn:li:person:ABC123" — extrai só o ID
+          const authorizedUser: string = introspectRes.data.authorizedUser || '';
+          if (authorizedUser) {
+            resolvedPageId = authorizedUser.split(':').pop() || '';
+            console.log(`[LinkedIn] Member ID via introspecção: ${resolvedPageId}`);
+          }
+        } catch (introspectErr: any) {
+          console.warn('[LinkedIn] Introspecção falhou:', introspectErr?.response?.data || introspectErr.message);
+        }
+      }
+
+      // Método 2: /v2/me com r_liteprofile (fallback)
+      if (!resolvedPageId) {
+        try {
+          const profileRes = await axios.get('https://api.linkedin.com/v2/me', {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+          resolvedPageId = profileRes.data.id || '';
+          const firstName = profileRes.data.localizedFirstName || '';
+          const lastName = profileRes.data.localizedLastName || '';
+          if (firstName || lastName) resolvedPageName = `${firstName} ${lastName}`.trim();
+          console.log(`[LinkedIn] Member ID via /v2/me: ${resolvedPageId}`);
+        } catch {
+          console.warn('[LinkedIn] /v2/me falhou (403 - sem escopo r_liteprofile)');
+        }
+      }
+
+      if (!resolvedPageId) {
+        return res.status(400).json({
+          error: 'Não foi possível obter seu Member ID automaticamente. Informe o Member ID manualmente (encontre em linkedin.com/in/SUA-URL → clique em "Mais" → "ID do LinkedIn").',
         });
-        resolvedPageId = profileRes.data.id;
-        const firstName = profileRes.data.localizedFirstName || '';
-        const lastName = profileRes.data.localizedLastName || '';
-        resolvedPageName = resolvedPageName || `${firstName} ${lastName}`.trim() || 'LinkedIn';
-        console.log(`[LinkedIn] Member ID obtido automaticamente: ${resolvedPageId}`);
-      } catch (profileErr: any) {
-        console.error('[LinkedIn] Falha ao buscar perfil:', profileErr?.response?.data || profileErr.message);
-        return res.status(400).json({ error: 'Access Token inválido ou sem permissão. Verifique o token e tente novamente.' });
       }
     }
 
@@ -34,8 +68,9 @@ export async function connectLinkedIn(req: AuthRequest, res: Response) {
       update: { accessToken, pageId: resolvedPageId, pageName: resolvedPageName },
       create: { userId: req.userId!, platform: 'linkedin', accessToken, pageId: resolvedPageId, pageName: resolvedPageName },
     });
-    return res.json({ ...account, memberIdFetched: !pageId });
-  } catch {
+    return res.json({ ...account, memberIdFetched: !pageId?.trim() });
+  } catch (err: any) {
+    console.error('[LinkedIn] Erro ao conectar:', err?.message);
     return res.status(500).json({ error: 'Erro ao conectar LinkedIn' });
   }
 }
