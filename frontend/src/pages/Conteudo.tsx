@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   Sparkles, Save, Clock, CheckCircle, Upload, FileText, Image as ImageIcon,
-  X, Send, Calendar, ChevronDown, Package, Zap, BookOpen, Star, Target, MessageSquare, Copy, CalendarDays, PlusCircle
+  X, Send, Calendar, ChevronDown, Package, Zap, BookOpen, Star, Target,
+  MessageSquare, Copy, CalendarDays, PlusCircle, LayoutList
 } from 'lucide-react';
 import api from '../services/api';
 
@@ -29,7 +30,6 @@ export default function Conteudo() {
   const [generated, setGenerated] = useState<any>(null);
   const [loadingGen, setLoadingGen] = useState(false);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
-  const [loadingImage, setLoadingImage] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
   const [imageStyle, setImageStyle] = useState('realista');
   const [imagePrompt, setImagePrompt] = useState<string | null>(null);
@@ -59,10 +59,10 @@ export default function Conteudo() {
   const [scheduleDate, setScheduleDate] = useState('');
   const [copiedPostId, setCopiedPostId] = useState<string | null>(null);
 
-  // Agendamento em lote
+  // Agendamento em lote (per-post datetime)
   const [showBatchModal, setShowBatchModal] = useState(false);
-  const [batchStartDate, setBatchStartDate] = useState('');
   const [batchSelected, setBatchSelected] = useState<string[]>([]);
+  const [batchSchedules, setBatchSchedules] = useState<Record<string, string>>({});
   const [schedulingBatch, setSchedulingBatch] = useState(false);
 
   // Importar post pronto
@@ -71,6 +71,16 @@ export default function Conteudo() {
   const [importHashtags, setImportHashtags] = useState('');
   const [importPlatform, setImportPlatform] = useState('linkedin');
   const [savingImport, setSavingImport] = useState(false);
+
+  // Gerador semanal
+  const [showWeeklyModal, setShowWeeklyModal] = useState(false);
+  const [weeklyTopic, setWeeklyTopic] = useState('');
+  const [weeklyPlatform, setWeeklyPlatform] = useState('linkedin');
+  const [weeklyPosts, setWeeklyPosts] = useState<any[]>([]);
+  const [weeklySchedules, setWeeklySchedules] = useState<Record<number, string>>({});
+  const [loadingWeekly, setLoadingWeekly] = useState(false);
+  const [savingWeekly, setSavingWeekly] = useState(false);
+  const [weeklyStep, setWeeklyStep] = useState<'config' | 'review'>('config');
 
   useEffect(() => {
     loadProducts();
@@ -106,25 +116,19 @@ export default function Conteudo() {
 
   function buildImagePrompt(style: string): string {
     const t = (topic || generated?.content || '').substring(0, 200).toLowerCase();
-
-    // Sujeito baseado no tema do post
     let subject = 'Brazilian electrician man in dark navy polo shirt, smiling confidently, holding a smartphone showing an app, industrial electrical panel with organized circuit breakers in background';
     if (t.includes('motor')) subject = 'Brazilian electrician technician in navy polo shirt inspecting a large three-phase industrial electric motor, copper windings visible, realistic factory environment';
     else if (t.includes('contator') || t.includes('rele')) subject = 'Brazilian electrician pointing at industrial contactors and relays mounted on DIN rail inside open control panel, professional pose';
     else if (t.includes('painel') || t.includes('quadro')) subject = 'Brazilian electrician professional in navy polo shirt working on open industrial electrical panel, busbars and circuit breakers clearly visible';
     else if (t.includes('cabo') || t.includes('fiacao')) subject = 'Brazilian electrician organizing color-coded electrical wires in cable tray, professional industrial setting, natural lighting';
-    else if (t.includes('grao') || t.includes('silo')) subject = 'Brazilian electrician technician near grain storage silo with industrial automation control box, outdoor realistic scene';
     else if (t.includes('inversor')) subject = 'Brazilian electrician adjusting variable frequency drive VFD settings on industrial control cabinet display, focused professional expression';
-    else if (t.includes('sensor')) subject = 'Brazilian electrician installing industrial proximity sensor on machinery, realistic factory floor environment';
-
     const styleMap: Record<string, string> = {
-      realista: `Photorealistic professional photography, Canon DSLR, natural lighting, shallow depth of field, sharp focus on person. ${subject}. Real photograph look, no illustration, no CGI. Suitable for LinkedIn post.`,
-      ilustrativo: `Digital illustration, technical drawing style, clean lines, dark blue and orange palette, professional infographic feel. ${subject}. No real photograph.`,
-      criativo: `Creative conceptual photography with dramatic lighting, dynamic composition, orange and electric blue accent colors, cinematic look. ${subject}. High contrast, editorial style.`,
-      post: `Square 1:1 format social media photo, centered composition, professional headshot style. ${subject}. Clean background, real photograph, suitable for Instagram or LinkedIn feed post.`,
-      story: `Vertical 9:16 format, bold composition with empty space at top for text overlay. ${subject}. Real photograph style, natural lighting, optimized for Instagram Story or Reels.`,
+      realista: `Photorealistic professional photography, Canon DSLR, natural lighting, shallow depth of field. ${subject}. Real photograph look, no illustration. Suitable for LinkedIn post.`,
+      ilustrativo: `Digital illustration, technical drawing style, clean lines, dark blue and orange palette. ${subject}. No real photograph.`,
+      criativo: `Creative conceptual photography with dramatic lighting, orange and electric blue accent colors, cinematic look. ${subject}. High contrast, editorial style.`,
+      post: `Square 1:1 format social media photo, centered composition. ${subject}. Clean background, real photograph.`,
+      story: `Vertical 9:16 format, bold composition with empty space at top for text overlay. ${subject}. Real photograph style.`,
     };
-
     return `${styleMap[style]} No watermark, no text overlay, no logos. High quality, photorealistic, suitable for social media marketing.`;
   }
 
@@ -148,7 +152,7 @@ export default function Conteudo() {
         platform: plt,
         content: postData.content,
         cta: postData.cta,
-        hashtags: postData.hashtags,
+        hashtags: Array.isArray(postData.hashtags) ? postData.hashtags.join(' ') : postData.hashtags,
         status: 'draft',
         imageUrl: imageUrl || null,
       });
@@ -211,44 +215,18 @@ export default function Conteudo() {
     setTimeout(() => setCopiedPostId(null), 2000);
   }
 
-  function buildBatchSchedule(): { postId: string; scheduledAt: string }[] {
-    if (!batchStartDate || batchSelected.length === 0) return [];
-    const start = new Date(batchStartDate);
-    const schedule: { postId: string; scheduledAt: string }[] = [];
-    const selectedPosts = posts.filter(p => batchSelected.includes(p.id));
-
-    // Distribui: LinkedIn Seg/Qua/Sex, Facebook Ter/Qui/Sab
-    const dayOffsets: Record<string, number[]> = {
-      linkedin: [0, 2, 4], // Seg, Qua, Sex
-      facebook: [1, 3, 5], // Ter, Qui, Sab
-    };
-
-    const counters: Record<string, number> = { linkedin: 0, facebook: 0 };
-
-    for (const post of selectedPosts) {
-      const plt = post.platform;
-      const offsets = dayOffsets[plt] || [0, 2, 4];
-      const idx = counters[plt] % offsets.length;
-      const weekOffset = Math.floor(counters[plt] / offsets.length) * 7;
-      const d = new Date(start);
-      d.setDate(d.getDate() + offsets[idx] + weekOffset);
-      d.setHours(9, 0, 0, 0);
-      schedule.push({ postId: post.id, scheduledAt: d.toISOString() });
-      counters[plt]++;
-    }
-    return schedule;
-  }
-
   async function confirmBatchSchedule() {
-    const items = buildBatchSchedule();
-    if (items.length === 0) return alert('Selecione posts e uma data de inicio');
+    const items = batchSelected
+      .map(postId => ({ postId, scheduledAt: batchSchedules[postId] }))
+      .filter(item => item.scheduledAt);
+    if (items.length === 0) return alert('Defina data e hora para pelo menos um post selecionado');
     setSchedulingBatch(true);
     try {
       await api.post('/content/posts/schedule-batch', { items });
-      alert(`${items.length} posts agendados com sucesso!`);
+      alert(`${items.length} post(s) agendado(s) com sucesso!`);
       setShowBatchModal(false);
       setBatchSelected([]);
-      setBatchStartDate('');
+      setBatchSchedules({});
       loadPosts();
     } catch (e: any) { alert(e.response?.data?.error || 'Erro ao agendar em lote'); }
     finally { setSchedulingBatch(false); }
@@ -272,7 +250,80 @@ export default function Conteudo() {
     finally { setSavingImport(false); }
   }
 
-  // ---- MODAL PUBLICAR ----
+  async function generateWeekly() {
+    if (!weeklyTopic.trim()) return alert('Digite o tema da semana');
+    setLoadingWeekly(true);
+    setWeeklyPosts([]);
+    setWeeklySchedules({});
+    try {
+      const { data } = await api.post('/content/generate-week', {
+        topic: weeklyTopic,
+        platform: weeklyPlatform,
+      });
+      if (!data.posts || data.posts.length === 0) {
+        alert('Nenhum post foi gerado. Tente novamente.');
+        return;
+      }
+      setWeeklyPosts(data.posts);
+      // Pre-preenche horários sugeridos com datas da próxima semana
+      const schedules: Record<number, string> = {};
+      const today = new Date();
+      const dayMap: Record<string, number> = {
+        'Segunda': 1, 'Terca': 2, 'Quarta': 3, 'Quinta': 4,
+        'Sexta': 5, 'Sabado': 6, 'Domingo': 0,
+      };
+      data.posts.forEach((p: any, i: number) => {
+        const targetDay = dayMap[p.day] ?? i;
+        const d = new Date(today);
+        const diff = (targetDay - today.getDay() + 7) % 7 || 7;
+        d.setDate(today.getDate() + diff);
+        const [hh, mm] = (p.suggestedTime || '08:00').split(':');
+        d.setHours(parseInt(hh), parseInt(mm || '0'), 0, 0);
+        const local = d.toISOString().slice(0, 16);
+        schedules[i] = local;
+      });
+      setWeeklySchedules(schedules);
+      setWeeklyStep('review');
+    } catch (e: any) {
+      alert(e.response?.data?.error || 'Erro ao gerar posts semanais');
+    } finally {
+      setLoadingWeekly(false);
+    }
+  }
+
+  async function saveWeeklyPosts() {
+    if (weeklyPosts.length === 0) return;
+    setSavingWeekly(true);
+    try {
+      let saved = 0;
+      for (let i = 0; i < weeklyPosts.length; i++) {
+        const p = weeklyPosts[i];
+        const scheduledAt = weeklySchedules[i];
+        await api.post('/content/posts', {
+          platform: weeklyPlatform,
+          content: p.content,
+          cta: p.cta || null,
+          hashtags: Array.isArray(p.hashtags) ? p.hashtags.join(' ') : (p.hashtags || null),
+          status: scheduledAt ? 'scheduled' : 'draft',
+          scheduledAt: scheduledAt || null,
+        });
+        saved++;
+      }
+      alert(`${saved} posts salvos no historico${weeklySchedules[0] ? ' e agendados' : ' como rascunhos'}!`);
+      setShowWeeklyModal(false);
+      setWeeklyPosts([]);
+      setWeeklyTopic('');
+      setWeeklyStep('config');
+      if (tab === 'posts') loadPosts();
+    } catch (e: any) {
+      alert(e.response?.data?.error || 'Erro ao salvar posts');
+    } finally {
+      setSavingWeekly(false);
+    }
+  }
+
+  // ─── MODALS ─────────────────────────────────────────────────────────────────
+
   function PublishModal({ postId, onClose }: { postId: string; onClose: () => void }) {
     const [localDate, setLocalDate] = useState('');
     return (
@@ -285,23 +336,16 @@ export default function Conteudo() {
           <button
             onClick={() => publishPost(postId)}
             disabled={publishing === postId}
-            className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white py-3 rounded-xl font-medium transition-colors"
-          >
+            className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white py-3 rounded-xl font-medium transition-colors">
             <Send size={16} /> {publishing === postId ? 'Publicando...' : 'Publicar agora'}
           </button>
           <div className="border-t border-gray-800 pt-4 space-y-3">
             <p className="text-sm text-gray-400 flex items-center gap-2"><Calendar size={14} /> Ou agendar para:</p>
-            <input
-              type="datetime-local"
-              value={localDate}
-              onChange={e => setLocalDate(e.target.value)}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
-            />
-            <button
-              onClick={() => localDate && publishPost(postId, localDate)}
+            <input type="datetime-local" value={localDate} onChange={e => setLocalDate(e.target.value)}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" />
+            <button onClick={() => localDate && publishPost(postId, localDate)}
               disabled={!localDate || publishing === postId}
-              className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white py-2 rounded-xl text-sm transition-colors"
-            >
+              className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white py-2 rounded-xl text-sm transition-colors">
               <Calendar size={14} /> Agendar publicacao
             </button>
           </div>
@@ -313,12 +357,15 @@ export default function Conteudo() {
     );
   }
 
+  // ─── RENDER ─────────────────────────────────────────────────────────────────
+
   return (
     <div className="space-y-6">
       {/* Modal publicar apos salvar */}
       {showPublishModal && savedPostId && (
         <PublishModal postId={savedPostId} onClose={() => { setShowPublishModal(false); setSavedPostId(null); }} />
       )}
+
       {/* Modal publicar do historico */}
       {publishModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
@@ -327,23 +374,18 @@ export default function Conteudo() {
               <h3 className="text-white font-semibold">Publicar post</h3>
               <button onClick={() => setPublishModal(null)} className="text-gray-500 hover:text-gray-300"><X size={18} /></button>
             </div>
-            <p className="text-gray-400 text-sm line-clamp-2">{publishModal.post.content}</p>
-            <button
-              onClick={() => publishPost(publishModal.post.id)}
-              disabled={publishing === publishModal.post.id}
-              className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white py-3 rounded-xl font-medium"
-            >
+            <p className="text-gray-400 text-sm line-clamp-3">{publishModal.post.content}</p>
+            <button onClick={() => publishPost(publishModal.post.id)} disabled={publishing === publishModal.post.id}
+              className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white py-3 rounded-xl font-medium">
               <Send size={16} /> {publishing === publishModal.post.id ? 'Publicando...' : 'Publicar agora'}
             </button>
             <div className="border-t border-gray-800 pt-4 space-y-3">
-              <p className="text-sm text-gray-400">Ou agendar:</p>
+              <p className="text-sm text-gray-400">Ou agendar para:</p>
               <input type="datetime-local" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)}
                 className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" />
-              <button
-                onClick={() => scheduleDate && publishPost(publishModal.post.id, scheduleDate)}
+              <button onClick={() => scheduleDate && publishPost(publishModal.post.id, scheduleDate)}
                 disabled={!scheduleDate || publishing === publishModal.post.id}
-                className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white py-2 rounded-xl text-sm"
-              >
+                className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white py-2 rounded-xl text-sm">
                 <Calendar size={14} /> Agendar
               </button>
             </div>
@@ -351,8 +393,149 @@ export default function Conteudo() {
         </div>
       )}
 
+      {/* ── MODAL GERADOR SEMANAL ── */}
+      {showWeeklyModal && (
+        <div className="fixed inset-0 bg-black/80 flex items-start justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-2xl space-y-5 my-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-white font-semibold text-lg flex items-center gap-2">
+                <LayoutList size={18} className="text-blue-400" />
+                {weeklyStep === 'config' ? 'Gerar semana de posts' : `${weeklyPosts.length} posts gerados — revise e agende`}
+              </h3>
+              <button onClick={() => { setShowWeeklyModal(false); setWeeklyStep('config'); setWeeklyPosts([]); }}
+                className="text-gray-500 hover:text-gray-300"><X size={18} /></button>
+            </div>
+
+            {weeklyStep === 'config' && (
+              <>
+                <div>
+                  <label className="text-sm text-gray-400 block mb-1">Tema da semana *</label>
+                  <textarea value={weeklyTopic} onChange={e => setWeeklyTopic(e.target.value)} rows={3}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white resize-none text-sm"
+                    placeholder="Ex: Instalação de inversores de frequência para bombas industriais" />
+                </div>
+                <div>
+                  <label className="text-sm text-gray-400 block mb-1">Plataforma</label>
+                  <select value={weeklyPlatform} onChange={e => setWeeklyPlatform(e.target.value)}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
+                    <option value="linkedin">LinkedIn</option>
+                    <option value="facebook">Facebook</option>
+                  </select>
+                </div>
+                <p className="text-xs text-gray-500">
+                  A IA vai gerar 7 posts com angulos diferentes (dor, dica, erro, conceito, historia, comparacao, CTA).
+                  Depois voce revisa, ajusta os horarios e salva todos de uma vez.
+                </p>
+                <button onClick={generateWeekly} disabled={loadingWeekly || !weeklyTopic.trim()}
+                  className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white py-3 rounded-xl font-medium transition-colors">
+                  <Sparkles size={16} />
+                  {loadingWeekly ? 'Gerando 7 posts com Claude...' : 'Gerar 7 posts'}
+                </button>
+                {loadingWeekly && (
+                  <div className="text-center py-2">
+                    <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                    <p className="text-gray-500 text-xs">Pode levar 20-40 segundos...</p>
+                  </div>
+                )}
+              </>
+            )}
+
+            {weeklyStep === 'review' && weeklyPosts.length > 0 && (
+              <>
+                <p className="text-xs text-gray-500">
+                  Ajuste o dia e horario de cada post. Se deixar em branco, vai salvar como rascunho.
+                </p>
+                <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
+                  {weeklyPosts.map((p: any, i: number) => (
+                    <div key={i} className="bg-gray-800 rounded-xl p-4 space-y-3 border border-gray-700">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-semibold text-blue-300 bg-blue-900/40 px-2 py-0.5 rounded">
+                          {p.day}
+                        </span>
+                        <span className="text-xs text-gray-400 bg-gray-700 px-2 py-0.5 rounded capitalize">
+                          {p.angle}
+                        </span>
+                      </div>
+                      <p className="text-gray-200 text-sm whitespace-pre-wrap line-clamp-4">{p.content}</p>
+                      {p.cta && <p className="text-blue-400 text-xs">CTA: {p.cta}</p>}
+                      <div>
+                        <label className="text-xs text-gray-500 block mb-1">Data e hora de publicacao</label>
+                        <input type="datetime-local" value={weeklySchedules[i] || ''}
+                          onChange={e => setWeeklySchedules(prev => ({ ...prev, [i]: e.target.value }))}
+                          className="w-full bg-gray-900 border border-gray-600 rounded-lg px-2 py-1.5 text-white text-sm" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-3 pt-2">
+                  <button onClick={() => { setWeeklyStep('config'); setWeeklyPosts([]); }}
+                    className="flex-1 bg-gray-700 hover:bg-gray-600 text-gray-300 py-2.5 rounded-xl text-sm transition-colors">
+                    Voltar e regerar
+                  </button>
+                  <button onClick={saveWeeklyPosts} disabled={savingWeekly}
+                    className="flex-1 flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white py-2.5 rounded-xl font-medium text-sm transition-colors">
+                    <Save size={14} />
+                    {savingWeekly ? 'Salvando...' : `Salvar ${weeklyPosts.length} posts`}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL AGENDAR EM LOTE (per-post datetime) ── */}
+      {showBatchModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-lg space-y-4 max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between">
+              <h3 className="text-white font-semibold text-lg flex items-center gap-2">
+                <CalendarDays size={18} /> Agendar rascunhos
+              </h3>
+              <button onClick={() => setShowBatchModal(false)} className="text-gray-500 hover:text-gray-300"><X size={18} /></button>
+            </div>
+            <p className="text-xs text-gray-500">Selecione os posts e defina data/hora individual para cada um.</p>
+
+            {posts.filter(p => p.status === 'draft').length === 0 && (
+              <p className="text-gray-600 text-sm text-center py-4">Nenhum rascunho disponivel.</p>
+            )}
+
+            <div className="space-y-3">
+              {posts.filter(p => p.status === 'draft').map(post => (
+                <div key={post.id} className={`rounded-xl border p-3 space-y-2 transition-colors ${batchSelected.includes(post.id) ? 'border-purple-500 bg-purple-900/20' : 'border-gray-700 bg-gray-800'}`}>
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input type="checkbox" checked={batchSelected.includes(post.id)}
+                      onChange={e => setBatchSelected(e.target.checked ? [...batchSelected, post.id] : batchSelected.filter(id => id !== post.id))}
+                      className="mt-1 accent-purple-500" />
+                    <div className="flex-1 min-w-0">
+                      <span className={`text-xs px-1.5 py-0.5 rounded mr-2 ${post.platform === 'linkedin' ? 'bg-blue-900 text-blue-300' : 'bg-indigo-900 text-indigo-300'}`}>{post.platform}</span>
+                      <span className="text-gray-300 text-sm">{post.content.substring(0, 80)}...</span>
+                    </div>
+                  </label>
+                  {batchSelected.includes(post.id) && (
+                    <div className="pl-7">
+                      <label className="text-xs text-gray-500 block mb-1">Data e hora *</label>
+                      <input type="datetime-local"
+                        value={batchSchedules[post.id] || ''}
+                        onChange={e => setBatchSchedules(prev => ({ ...prev, [post.id]: e.target.value }))}
+                        className="w-full bg-gray-900 border border-gray-600 rounded-lg px-2 py-1.5 text-white text-sm" />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <button onClick={confirmBatchSchedule} disabled={schedulingBatch || batchSelected.length === 0}
+              className="w-full flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white py-3 rounded-xl font-medium transition-colors">
+              <CalendarDays size={16} /> {schedulingBatch ? 'Agendando...' : `Agendar ${batchSelected.length} post(s)`}
+            </button>
+          </div>
+        </div>
+      )}
+
       <h1 className="text-2xl font-bold text-white">Conteudo</h1>
 
+      {/* Tabs */}
       <div className="flex gap-2 flex-wrap">
         {[['generate','Gerar Post'],['upload','Upload de Material'],['analyze','Analisar Texto'],['posts','Historico']].map(([key, label]) => (
           <button key={key} onClick={() => setTab(key as any)}
@@ -362,14 +545,11 @@ export default function Conteudo() {
         ))}
       </div>
 
-      {/* ABA: GERAR POST */}
+      {/* ── ABA: GERAR POST ── */}
       {tab === 'generate' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Formulario */}
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-5">
             <h2 className="font-semibold text-white">Configurar Post</h2>
-
-            {/* Plataforma */}
             <div>
               <label className="text-sm text-gray-400 block mb-1">Plataforma</label>
               <select value={platform} onChange={e => setPlatform(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white">
@@ -377,16 +557,12 @@ export default function Conteudo() {
                 <option value="facebook">Facebook</option>
               </select>
             </div>
-
-            {/* Tema */}
             <div>
               <label className="text-sm text-gray-400 block mb-1">Tema do post *</label>
               <textarea value={topic} onChange={e => setTopic(e.target.value)} rows={3}
                 className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white resize-none text-sm"
                 placeholder="Ex: Como dimensionar um contator trifasico corretamente" />
             </div>
-
-            {/* Tom */}
             <div>
               <label className="text-sm text-gray-400 block mb-2">Tom da postagem</label>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -403,8 +579,6 @@ export default function Conteudo() {
                 })}
               </div>
             </div>
-
-            {/* Produto/Servico */}
             <div>
               <label className="text-sm text-gray-400 block mb-1">Produto/Servico (opcional)</label>
               <div className="relative">
@@ -424,7 +598,7 @@ export default function Conteudo() {
                       Nenhum produto
                     </button>
                     {products.length === 0 && (
-                      <p className="px-4 py-3 text-xs text-gray-600">Nenhum produto cadastrado. Vá em Funil de Vendas para adicionar.</p>
+                      <p className="px-4 py-3 text-xs text-gray-600">Nenhum produto cadastrado. Va em Funil de Vendas para adicionar.</p>
                     )}
                     {products.map(p => (
                       <button key={p.id} onClick={() => { setSelectedProduct(p); setShowProducts(false); }}
@@ -434,7 +608,6 @@ export default function Conteudo() {
                           <div>
                             <p className="text-white text-sm font-medium">{p.name}</p>
                             {p.url && <p className="text-blue-400 text-xs truncate">{p.url}</p>}
-                            {p.type && <p className="text-gray-500 text-xs">{p.type}{p.price ? ` · R$ ${p.price}` : ''}</p>}
                           </div>
                         </div>
                       </button>
@@ -442,18 +615,13 @@ export default function Conteudo() {
                   </div>
                 )}
               </div>
-              {selectedProduct?.url && (
-                <p className="text-xs text-green-400 mt-1">IA vai mencionar: {selectedProduct.url}</p>
-              )}
             </div>
-
             <button onClick={generate} disabled={!topic || loadingGen}
               className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white py-3 rounded-xl font-medium transition-colors">
               <Sparkles size={16} /> {loadingGen ? 'Gerando post...' : 'Gerar com IA'}
             </button>
           </div>
 
-          {/* Resultado */}
           {(generated || loadingGen) && (
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-4">
               {loadingGen && (
@@ -462,7 +630,6 @@ export default function Conteudo() {
                   <p className="text-gray-400 text-sm">Gerando post com Claude...</p>
                 </div>
               )}
-
               {generated && !loadingGen && (
                 <>
                   <div className="flex items-center justify-between">
@@ -472,17 +639,14 @@ export default function Conteudo() {
                       <Save size={14} /> Salvar rascunho
                     </button>
                   </div>
-
                   <div className="bg-gray-800 rounded-lg p-4">
                     <p className="text-gray-200 whitespace-pre-wrap text-sm">{generated.content}</p>
                   </div>
-
                   {generated.cta && (
                     <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-3">
                       <p className="text-blue-300 text-sm font-medium">CTA: {generated.cta}</p>
                     </div>
                   )}
-
                   {generated.hashtags && (
                     <div className="flex flex-wrap gap-2">
                       {generated.hashtags.map((h: string, i: number) => (
@@ -490,11 +654,9 @@ export default function Conteudo() {
                       ))}
                     </div>
                   )}
-
-                  {/* Gerador de prompt para imagem externa */}
                   <div className="border-t border-gray-800 pt-4">
                     <p className="text-xs text-gray-500 mb-3 flex items-center gap-1">
-                      <ImageIcon size={12} /> Gerar prompt para imagem — copie e use no Midjourney, DALL-E, Leonardo ou outro gerador
+                      <ImageIcon size={12} /> Gerar prompt para imagem — copie e use no Midjourney, DALL-E ou Leonardo
                     </p>
                     <div className="flex gap-2 flex-wrap mb-3">
                       {IMAGE_STYLES.map(s => (
@@ -522,7 +684,7 @@ export default function Conteudo() {
         </div>
       )}
 
-      {/* ABA: UPLOAD DE MATERIAL */}
+      {/* ── ABA: UPLOAD DE MATERIAL ── */}
       {tab === 'upload' && (
         <div className="space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -545,7 +707,6 @@ export default function Conteudo() {
               </select>
             </div>
           </div>
-
           <div
             onDragOver={e => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
@@ -567,21 +728,18 @@ export default function Conteudo() {
               </div>
             )}
           </div>
-
           {file && !uploadResult && (
             <button onClick={handleUpload} disabled={loadingUpload}
               className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white py-3 rounded-xl font-medium transition-colors">
               <Sparkles size={18} /> {loadingUpload ? 'Analisando com Claude...' : `Gerar ${quantity} posts a partir deste arquivo`}
             </button>
           )}
-
           {loadingUpload && (
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 text-center">
               <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
               <p className="text-gray-400">Lendo o arquivo com Claude e gerando posts...</p>
             </div>
           )}
-
           {uploadResult && (
             <div className="space-y-4">
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
@@ -609,47 +767,45 @@ export default function Conteudo() {
               ))}
             </div>
           )}
+
+          {/* Importar post pronto */}
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-4">
+            <h2 className="font-semibold text-white flex items-center gap-2"><PlusCircle size={16} className="text-green-400" /> Importar Post Pronto para o Historico</h2>
+            <p className="text-gray-500 text-xs">Cole um post que voce ja escreveu ou editou manualmente para salvar e depois publicar ou agendar.</p>
+            <div>
+              <label className="text-sm text-gray-400 block mb-1">Plataforma</label>
+              <select value={importPlatform} onChange={e => setImportPlatform(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
+                <option value="linkedin">LinkedIn</option>
+                <option value="facebook">Facebook</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-sm text-gray-400 block mb-1">Conteudo do post *</label>
+              <textarea value={importContent} onChange={e => setImportContent(e.target.value)} rows={6}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white resize-none text-sm"
+                placeholder="Cole aqui o texto completo do post..." />
+            </div>
+            <div>
+              <label className="text-sm text-gray-400 block mb-1">CTA (opcional)</label>
+              <input value={importCta} onChange={e => setImportCta(e.target.value)}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
+                placeholder="Ex: Acesse o Manual do Eletricista: go.hotmart.com/..." />
+            </div>
+            <div>
+              <label className="text-sm text-gray-400 block mb-1">Hashtags (opcional)</label>
+              <input value={importHashtags} onChange={e => setImportHashtags(e.target.value)}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
+                placeholder="#ManualDoEletricista #Eletricista" />
+            </div>
+            <button onClick={saveImportedPost} disabled={savingImport || !importContent.trim()}
+              className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white py-3 rounded-xl font-medium transition-colors">
+              <Save size={16} /> {savingImport ? 'Salvando...' : 'Salvar no Historico'}
+            </button>
+          </div>
         </div>
       )}
 
-      {/* IMPORTAR POST PRONTO — disponivel em qualquer aba */}
-      {tab === 'upload' && (
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-4">
-          <h2 className="font-semibold text-white flex items-center gap-2"><PlusCircle size={16} className="text-green-400" /> Importar Post Pronto para o Historico</h2>
-          <p className="text-gray-500 text-xs">Cole um post que voce ja escreveu ou editou manualmente para salvar no historico e depois publicar ou agendar.</p>
-          <div>
-            <label className="text-sm text-gray-400 block mb-1">Plataforma</label>
-            <select value={importPlatform} onChange={e => setImportPlatform(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
-              <option value="linkedin">LinkedIn</option>
-              <option value="facebook">Facebook</option>
-            </select>
-          </div>
-          <div>
-            <label className="text-sm text-gray-400 block mb-1">Conteudo do post *</label>
-            <textarea value={importContent} onChange={e => setImportContent(e.target.value)} rows={6}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white resize-none text-sm"
-              placeholder="Cole aqui o texto completo do post..." />
-          </div>
-          <div>
-            <label className="text-sm text-gray-400 block mb-1">CTA (opcional)</label>
-            <input value={importCta} onChange={e => setImportCta(e.target.value)}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
-              placeholder="Ex: Acesse o Manual do Eletricista: go.hotmart.com/..." />
-          </div>
-          <div>
-            <label className="text-sm text-gray-400 block mb-1">Hashtags (opcional)</label>
-            <input value={importHashtags} onChange={e => setImportHashtags(e.target.value)}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
-              placeholder="#ManualDoEletricista #Eletricista" />
-          </div>
-          <button onClick={saveImportedPost} disabled={savingImport || !importContent.trim()}
-            className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white py-3 rounded-xl font-medium transition-colors">
-            <Save size={16} /> {savingImport ? 'Salvando...' : 'Salvar no Historico'}
-          </button>
-        </div>
-      )}
-
-      {/* ABA: ANALISAR TEXTO */}
+      {/* ── ABA: ANALISAR TEXTO ── */}
       {tab === 'analyze' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-4">
@@ -676,71 +832,22 @@ export default function Conteudo() {
         </div>
       )}
 
-      {/* ABA: HISTORICO */}
+      {/* ── ABA: HISTORICO ── */}
       {tab === 'posts' && (
         <div className="space-y-4">
-          {/* Cabecalho com acoes em lote */}
           <div className="flex flex-wrap gap-3 items-center justify-between">
             <p className="text-gray-400 text-sm">{posts.length} post{posts.length !== 1 ? 's' : ''} salvos</p>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
+              <button onClick={() => { setShowWeeklyModal(true); setWeeklyStep('config'); setWeeklyPosts([]); }}
+                className="flex items-center gap-2 bg-blue-700 hover:bg-blue-600 text-white text-sm px-4 py-2 rounded-lg transition-colors">
+                <LayoutList size={14} /> Gerar semana
+              </button>
               <button onClick={() => setShowBatchModal(true)}
                 className="flex items-center gap-2 bg-purple-700 hover:bg-purple-600 text-white text-sm px-4 py-2 rounded-lg transition-colors">
-                <CalendarDays size={14} /> Agendar semana
+                <CalendarDays size={14} /> Agendar rascunhos
               </button>
             </div>
           </div>
-
-          {/* Modal agendamento em lote */}
-          {showBatchModal && (
-            <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-              <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-lg space-y-4 max-h-[80vh] overflow-y-auto">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-white font-semibold text-lg flex items-center gap-2"><CalendarDays size={18} /> Agendar semana</h3>
-                  <button onClick={() => setShowBatchModal(false)} className="text-gray-500 hover:text-gray-300"><X size={18} /></button>
-                </div>
-                <div>
-                  <label className="text-sm text-gray-400 block mb-1">Data de inicio da semana (Segunda-feira)</label>
-                  <input type="date" value={batchStartDate} onChange={e => setBatchStartDate(e.target.value)}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" />
-                </div>
-                <p className="text-xs text-gray-500">LinkedIn: Seg/Qua/Sex as 9h &nbsp;|&nbsp; Facebook: Ter/Qui/Sab as 9h</p>
-                <div className="space-y-2">
-                  <p className="text-sm text-gray-400 font-medium">Selecione os posts (rascunhos):</p>
-                  {posts.filter(p => p.status === 'draft').length === 0 && (
-                    <p className="text-gray-600 text-sm">Nenhum rascunho disponivel.</p>
-                  )}
-                  {posts.filter(p => p.status === 'draft').map(post => (
-                    <label key={post.id} className="flex items-start gap-3 bg-gray-800 rounded-lg p-3 cursor-pointer hover:bg-gray-750">
-                      <input type="checkbox" checked={batchSelected.includes(post.id)}
-                        onChange={e => setBatchSelected(e.target.checked ? [...batchSelected, post.id] : batchSelected.filter(id => id !== post.id))}
-                        className="mt-1 accent-purple-500" />
-                      <div className="flex-1 min-w-0">
-                        <span className={`text-xs px-1.5 py-0.5 rounded mr-2 ${post.platform === 'linkedin' ? 'bg-blue-900 text-blue-300' : 'bg-indigo-900 text-indigo-300'}`}>{post.platform}</span>
-                        <span className="text-gray-300 text-sm line-clamp-2">{post.content}</span>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-                {batchSelected.length > 0 && batchStartDate && (
-                  <div className="bg-gray-800 rounded-lg p-3 space-y-1">
-                    <p className="text-xs text-gray-400 font-medium">Preview do agendamento:</p>
-                    {buildBatchSchedule().map((item, i) => {
-                      const p = posts.find(x => x.id === item.postId);
-                      return (
-                        <p key={i} className="text-xs text-gray-300">
-                          {new Date(item.scheduledAt).toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' })} 09h — <span className={p?.platform === 'linkedin' ? 'text-blue-400' : 'text-indigo-400'}>{p?.platform}</span>: {p?.content.substring(0, 50)}...
-                        </p>
-                      );
-                    })}
-                  </div>
-                )}
-                <button onClick={confirmBatchSchedule} disabled={schedulingBatch || batchSelected.length === 0 || !batchStartDate}
-                  className="w-full flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white py-3 rounded-xl font-medium transition-colors">
-                  <CalendarDays size={16} /> {schedulingBatch ? 'Agendando...' : `Agendar ${batchSelected.length} post(s)`}
-                </button>
-              </div>
-            </div>
-          )}
 
           {posts.length === 0 && <p className="text-gray-500 text-center py-8">Nenhum post salvo ainda.</p>}
           {posts.map(post => (

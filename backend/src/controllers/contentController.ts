@@ -310,6 +310,70 @@ export async function scheduleBatch(req: AuthRequest, res: Response) {
   }
 }
 
+export async function generateWeeklyPosts(req: AuthRequest, res: Response) {
+  try {
+    const { topic, platform = 'linkedin', tone = 'mix' } = req.body;
+    if (!topic) return res.status(400).json({ error: 'Tema obrigatorio' });
+
+    const kbContext = await searchKnowledgeForTopic(req.userId!, topic);
+    const template = TEMPLATES[platform as 'linkedin' | 'facebook'] || TEMPLATES.linkedin;
+    const hashtags = getHashtags(topic, platform);
+
+    const systemPrompt = `Voce e o assistente de conteudo do Jonas, criador do Manual do Eletricista.
+Jonas e eletricista industrial e encarregado de obras desde 1997, com especializacao em automacao de armazenagem de graos.
+Ele vende ebooks no Hotmart: Vol.1 (go.hotmart.com/E104935068T) e Vol.2 (go.hotmart.com/A105044012Q).
+Tom: direto, linguagem de obra, sem academicismo, sem cliches motivacionais. Nunca inventar dados tecnicos.`;
+
+    const userPrompt = `${template}
+
+GERE 7 POSTS DIFERENTES sobre o tema: "${topic}"
+Plataforma: ${platform}
+${kbContext ? `BASE DE CONHECIMENTO:\n---\n${kbContext}\n---\n` : ''}
+
+Angulos obrigatorios (um por post, nessa ordem):
+1. "dor" - problema/frustacao que todo eletricista conhece
+2. "dica" - tecnica pratica do campo, nao do livro
+3. "erro" - engano comum que custa caro ou e perigoso
+4. "conceito" - explicacao tecnica simplificada
+5. "historia" - caso real de obra (sem nome de cliente)
+6. "comparacao" - antes/depois ou certo/errado lado a lado
+7. "cta" - post com chamada clara para o ebook
+
+REGRAS:
+- "content" = corpo do post SEM cta e SEM hashtags
+- "cta" = chamada para acao (inclua link go.hotmart.com/E104935068T no post 7)
+- Horarios sugeridos: 8h, 9h, 10h, 12h, 17h, 18h, 19h
+
+Retorne SOMENTE JSON valido:
+{
+  "posts": [
+    {
+      "day": "Segunda",
+      "suggestedTime": "08:00",
+      "angle": "dor",
+      "content": "corpo do post",
+      "cta": "chamada",
+      "hashtags": ${JSON.stringify(hashtags)}
+    }
+  ]
+}`;
+
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 6000,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userPrompt }],
+    });
+
+    const text = response.content[0].type === 'text' ? response.content[0].text : '{}';
+    const clean = text.replace(/```json|```/g, '').trim();
+    const result = JSON.parse(clean);
+    return res.json(result);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Erro ao gerar posts semanais' });
+  }
+}
+
 export async function uploadAndGeneratePosts(req: AuthRequest, res: Response) {
   try {
     if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
