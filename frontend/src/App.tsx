@@ -3,7 +3,8 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Conteudo from './pages/Conteudo';
-import Semanas from './pages/Semanas';
+import Funil from './pages/Funil';
+import Calendario from './pages/Calendario';
 import Configuracoes from './pages/Configuracoes';
 import AuthCallback from './pages/AuthCallback';
 import BaseConhecimento from './pages/BaseConhecimento';
@@ -26,7 +27,8 @@ export default function App() {
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="conteudo" element={<Conteudo />} />
             <Route path="base-conhecimento" element={<BaseConhecimento />} />
-            <Route path="semanas" element={<Semanas />} />
+            <Route path="funil" element={<Funil />} />
+            <Route path="calendario" element={<Calendario />} />
             <Route path="configuracoes" element={<Configuracoes />} />
           </Route>
         </Routes>

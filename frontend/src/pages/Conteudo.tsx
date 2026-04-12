@@ -1,10 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   Sparkles, Save, Clock, CheckCircle, Upload, FileText, Image as ImageIcon,
-  X, Send, Calendar, ChevronDown, Package, Zap, BookOpen, Star, Target, MessageSquare, Copy, CalendarDays, PlusCircle, Wand2
+  X, Send, Calendar, ChevronDown, Package, Zap, BookOpen, Star, Target, MessageSquare, Copy, CalendarDays, PlusCircle
 } from 'lucide-react';
 import api from '../services/api';
-import { generateWeeklyContentV2 } from '../services/api/aiV2';
 
 const TONES = [
   { value: 'tecnico', label: 'Tecnico', icon: BookOpen, desc: 'Preciso e detalhado' },
@@ -73,31 +72,17 @@ export default function Conteudo() {
   const [importPlatform, setImportPlatform] = useState('linkedin');
   const [savingImport, setSavingImport] = useState(false);
 
-  // Gerador Semanal V2
-  const [showWeeklyModal, setShowWeeklyModal] = useState(false);
-  const [weeklyTheme, setWeeklyTheme] = useState('');
-  const [weeklyTone, setWeeklyTone] = useState('profissional');
-  const [weeklyPlatform, setWeeklyPlatform] = useState<'linkedin' | 'facebook' | 'both'>('both');
-  const [generatingWeekly, setGeneratingWeekly] = useState(false);
-  const [weeklyResult, setWeeklyResult] = useState<any>(null);
-
   useEffect(() => {
     loadProducts();
     if (tab === 'posts') loadPosts();
   }, [tab]);
 
   async function loadProducts() {
-    try {
-      const { data } = await api.get('/funnel/products');
-      setProducts(Array.isArray(data) ? data : []);
-    } catch { setProducts([]); }
+    try { const { data } = await api.get('/funnel/products'); setProducts(data); } catch {}
   }
 
   async function loadPosts() {
-    try {
-      const { data } = await api.get('/content/posts');
-      setPosts(Array.isArray(data) ? data : []);
-    } catch { setPosts([]); }
+    try { const { data } = await api.get('/content/posts'); setPosts(data); } catch {}
   }
 
   async function generate() {
@@ -285,29 +270,6 @@ export default function Conteudo() {
       if (tab === 'posts') loadPosts();
     } catch { alert('Erro ao salvar post'); }
     finally { setSavingImport(false); }
-  }
-
-  // Gerar conteúdo semanal com Multi-IA
-  async function generateWeekly() {
-    if (!weeklyTheme.trim()) return alert('Digite um tema para a semana');
-    
-    setGeneratingWeekly(true);
-    setWeeklyResult(null);
-    
-    try {
-      const result = await generateWeeklyContentV2({
-        theme: weeklyTheme,
-        tone: weeklyTone,
-        platform: weeklyPlatform,
-      });
-      
-      setWeeklyResult(result);
-      alert(`✅ ${result.metadata.postsGenerated} posts gerados com sucesso em ${Math.round(result.metadata.totalTimeMs / 1000)}s!`);
-    } catch (error: any) {
-      alert('Erro ao gerar conteúdo: ' + (error.message || 'Tente novamente'));
-    } finally {
-      setGeneratingWeekly(false);
-    }
   }
 
   // ---- MODAL PUBLICAR ----
@@ -721,140 +683,12 @@ export default function Conteudo() {
           <div className="flex flex-wrap gap-3 items-center justify-between">
             <p className="text-gray-400 text-sm">{posts.length} post{posts.length !== 1 ? 's' : ''} salvos</p>
             <div className="flex gap-2">
-              <button onClick={() => setShowWeeklyModal(true)}
-                className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white text-sm px-4 py-2 rounded-lg transition-colors">
-                <Wand2 size={14} /> Gerar Semana
-              </button>
               <button onClick={() => setShowBatchModal(true)}
                 className="flex items-center gap-2 bg-purple-700 hover:bg-purple-600 text-white text-sm px-4 py-2 rounded-lg transition-colors">
                 <CalendarDays size={14} /> Agendar semana
               </button>
             </div>
           </div>
-
-          {/* Modal Gerador Semanal V2 */}
-          {showWeeklyModal && (
-            <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-              <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-white font-semibold text-lg flex items-center gap-2">
-                    <Wand2 size={18} className="text-purple-400" /> Gerar Conteúdo da Semana
-                  </h3>
-                  <button onClick={() => { setShowWeeklyModal(false); setWeeklyResult(null); }} className="text-gray-500 hover:text-gray-300">
-                    <X size={18} />
-                  </button>
-                </div>
-
-                {!weeklyResult ? (
-                  <>
-                    <p className="text-gray-400 text-sm">
-                      A IA vai gerar 7 posts (um para cada dia da semana) com estratégias otimizadas para engajamento.
-                    </p>
-
-                    <div>
-                      <label className="text-sm text-gray-400 block mb-1">Tema da semana *</label>
-                      <input
-                        type="text"
-                        value={weeklyTheme}
-                        onChange={e => setWeeklyTheme(e.target.value)}
-                        placeholder="Ex: Manual do Eletricista, Dicas de Segurança, etc"
-                        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-sm text-gray-400 block mb-1">Tom de voz</label>
-                      <select
-                        value={weeklyTone}
-                        onChange={e => setWeeklyTone(e.target.value)}
-                        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
-                      >
-                        <option value="profissional">Profissional</option>
-                        <option value="casual">Casual</option>
-                        <option value="inspirador">Inspirador</option>
-                        <option value="direto">Direto</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="text-sm text-gray-400 block mb-1">Plataforma</label>
-                      <select
-                        value={weeklyPlatform}
-                        onChange={e => setWeeklyPlatform(e.target.value as any)}
-                        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
-                      >
-                        <option value="both">LinkedIn + Facebook (14 posts)</option>
-                        <option value="linkedin">Apenas LinkedIn (7 posts)</option>
-                        <option value="facebook">Apenas Facebook (7 posts)</option>
-                      </select>
-                    </div>
-
-                    <div className="bg-blue-900/20 border border-blue-800 rounded-lg p-3">
-                      <p className="text-blue-300 text-xs">
-                        💡 <strong>Dica:</strong> A geração usa múltiplas IAs (Claude, OpenAI, Gemini) com fallback automático para garantir que sempre funcione.
-                      </p>
-                    </div>
-
-                    <button
-                      onClick={generateWeekly}
-                      disabled={generatingWeekly || !weeklyTheme.trim()}
-                      className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 disabled:opacity-50 text-white py-3 rounded-xl font-medium transition-colors"
-                    >
-                      {generatingWeekly ? (
-                        <>
-                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                          Gerando com IA... (pode levar até 60s)
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles size={16} /> Gerar {weeklyPlatform === 'both' ? '14' : '7'} Posts
-                        </>
-                      )}
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <div className="bg-green-900/20 border border-green-800 rounded-lg p-3">
-                      <p className="text-green-300 text-sm">
-                        ✅ <strong>{weeklyResult.metadata.postsGenerated} posts gerados</strong> em {Math.round(weeklyResult.metadata.totalTimeMs / 1000)}s
-                        {weeklyResult.metadata.providersUsed.length > 1 && (
-                          <span> usando {weeklyResult.metadata.providersUsed.join(', ')}</span>
-                        )}
-                      </p>
-                    </div>
-
-                    <div className="space-y-3 max-h-[50vh] overflow-y-auto">
-                      {weeklyResult.weekPosts.map((post: any, idx: number) => (
-                        <div key={idx} className="bg-gray-800 rounded-lg p-4 space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-medium text-blue-400">{post.dayLabel} - {post.platform}</span>
-                            <span className="text-xs text-gray-500">{post.suggestedTime}</span>
-                          </div>
-                          <p className="text-gray-300 text-sm line-clamp-4">{post.content}</p>
-                          <p className="text-xs text-gray-500">Estratégia: {post.strategy}</p>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => { setWeeklyResult(null); setWeeklyTheme(''); }}
-                        className="flex-1 bg-gray-700 hover:bg-gray-600 text-white py-3 rounded-xl font-medium transition-colors"
-                      >
-                        Gerar Novamente
-                      </button>
-                      <button
-                        onClick={() => { setShowWeeklyModal(false); setWeeklyResult(null); loadPosts(); }}
-                        className="flex-1 bg-green-600 hover:bg-green-500 text-white py-3 rounded-xl font-medium transition-colors"
-                      >
-                        Ver no Histórico
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-          )}
 
           {/* Modal agendamento em lote */}
           {showBatchModal && (

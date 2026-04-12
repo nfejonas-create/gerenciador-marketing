@@ -16,6 +16,3 @@ export function authGuard(req: AuthRequest, res: Response, next: NextFunction) {
     return res.status(401).json({ error: 'Token invalido' });
   }
 }
-
-// Alias para compatibilidade
-export const authMiddleware = authGuard;

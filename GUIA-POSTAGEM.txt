@@ -1,0 +1,119 @@
+# GUIA COMPLETO — POSTAGEM LINKEDIN + FACEBOOK
+# Gerenciador de Marketing — Manual do Eletricista
+
+==============================================================
+## RESUMO DO PROJETO
+==============================================================
+
+Frontend: https://frontend-six-lemon-74.vercel.app
+Backend:  https://gerenciador-marketing-backend.onrender.com
+GitHub:   https://github.com/nfejonas-create/gerenciador-marketing
+Banco:    Neon PostgreSQL (cloud)
+
+==============================================================
+## CREDENCIAIS SALVAS NO RENDER (backend)
+==============================================================
+
+DATABASE_URL        = postgresql://neondb_owner:npg_CVTiNJ2F0HnE@ep-proud-credit-amxvsozi.c-5.us-east-1.aws.neon.tech/neondb?sslmode=require
+ANTHROPIC_API_KEY   = Claude AI para gerar posts
+FACEBOOK_APP_ID     = 2938482046357128
+FACEBOOK_APP_SECRET = 82b6e0b0fb52ed3ed8d2739e1b316687
+SCHEDULER_SECRET    = gerenciador-scheduler-2026-secret
+JWT_SECRET          = minha-chave-super-secreta-2026
+
+==============================================================
+## LINKEDIN — COMO CONECTAR E POSTAR
+==============================================================
+
+APP LINKEDIN:
+  - Client ID:     77mq54197dn0yk
+  - Produto necessario: "Share on LinkedIn" (aprovado)
+  - Escopo necessario: w_member_social
+
+COMO GERAR TOKEN:
+  1. Acesse: https://www.linkedin.com/developers/tools/oauth
+  2. Selecione o app
+  3. Marque o escopo: w_member_social
+  4. Clique em "Request access token"
+  5. Copie o token (validade: 60 dias)
+
+CONECTAR NO APP:
+  1. App > Configuracoes > LinkedIn
+  2. Cole o token
+  3. Salve
+
+CAUSA DE ERROS:
+  - 403: token sem escopo w_member_social -> gerar novo token
+  - 401: token expirado -> gerar novo token
+
+==============================================================
+## FACEBOOK — COMO CONECTAR E POSTAR
+==============================================================
+
+APP FACEBOOK:
+  - App: MANUAL ELETRICISTA MKT
+  - App ID:     2938482046357128
+  - Pagina:     Manual do Eletricista
+  - Page ID:    1049737558220873
+
+COMO GERAR TOKEN DE PAGINA (60 dias):
+  1. Acesse: https://developers.facebook.com/tools/explorer
+  2. Selecione o app: MANUAL ELETRICISTA MKT
+  3. Em "Usuario ou Pagina" -> selecione "Manual do Eletricista"
+     *** OBRIGATORIO: selecionar TOKEN DA PAGINA, nao token do usuario ***
+  4. Permissoes necessarias:
+     - pages_manage_posts
+     - pages_read_engagement
+     - pages_show_list
+     - pages_read_user_content
+  5. Clique em "Generate Access Token"
+  6. Copie o token (EAAp...)
+
+CONECTAR NO APP:
+  1. App > Configuracoes > Facebook
+  2. Cole o token de PAGINA
+  3. Page ID: 1049737558220873
+  4. Salve (backend converte para token de 60 dias automaticamente)
+
+CAUSA DE ERROS:
+  - "Session has expired": token expirado -> gerar novo Page Token
+  - (#200) permission error: usando token de usuario em vez de pagina
+  - (#100): pageId errado
+
+==============================================================
+## AGENDAMENTO AUTOMATICO (cron-job.org)
+==============================================================
+
+URL: https://cron-job.org
+  - Job: Gerenciador Marketing Scheduler
+  - URL do trigger: https://gerenciador-marketing-backend.onrender.com/social/scheduler/trigger
+  - Metodo: POST
+  - Header: x-scheduler-secret: gerenciador-scheduler-2026-secret
+  - Frequencia: a cada 5 minutos
+
+==============================================================
+## COMO RESTAURAR NA NOVA MAQUINA
+==============================================================
+
+1. Instalar Node.js: https://nodejs.org (versao LTS)
+
+2. Clonar o projeto:
+   git clone https://github.com/nfejonas-create/gerenciador-marketing.git
+
+3. Instalar dependencias:
+   cd backend  -> npm install
+   cd frontend -> npm install
+
+4. Criar backend/.env com as variaveis acima
+
+5. O app online ja funciona sem rodar local:
+   https://frontend-six-lemon-74.vercel.app
+
+==============================================================
+## DICAS RAPIDAS
+==============================================================
+
+- Token LinkedIn: dura 60 dias -> renovar antes de expirar
+- Token Facebook Page Token: dura 60 dias -> renovar pelo Graph Explorer
+- Se der erro 401/403 -> reconectar a conta em Configuracoes
+- Cloudinary pendente: Cloud Name dj0hicl0y | API Key 155816269565396

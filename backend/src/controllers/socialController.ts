@@ -8,69 +8,13 @@ const prisma = new PrismaClient();
 export async function connectLinkedIn(req: AuthRequest, res: Response) {
   try {
     const { accessToken, pageId, pageName } = req.body;
-
-    let resolvedPageId = pageId?.trim() || '';
-    let resolvedPageName = pageName?.trim() || 'LinkedIn';
-
-    // Tenta obter o Member ID automaticamente via introspecção do token
-    if (!resolvedPageId) {
-      const clientId = process.env.LINKEDIN_CLIENT_ID;
-      const clientSecret = process.env.LINKEDIN_CLIENT_SECRET;
-
-      // Método 1: Introspecção do token (usa client credentials, não precisa de r_liteprofile)
-      if (clientId && clientSecret) {
-        try {
-          const introspectRes = await axios.post(
-            'https://api.linkedin.com/v2/introspectToken',
-            new URLSearchParams({
-              client_id: clientId,
-              client_secret: clientSecret,
-              token: accessToken,
-            }).toString(),
-            { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
-          );
-          // authorizedUser vem como "urn:li:person:ABC123" — extrai só o ID
-          const authorizedUser: string = introspectRes.data.authorizedUser || '';
-          if (authorizedUser) {
-            resolvedPageId = authorizedUser.split(':').pop() || '';
-            console.log(`[LinkedIn] Member ID via introspecção: ${resolvedPageId}`);
-          }
-        } catch (introspectErr: any) {
-          console.warn('[LinkedIn] Introspecção falhou:', introspectErr?.response?.data || introspectErr.message);
-        }
-      }
-
-      // Método 2: /v2/me com r_liteprofile (fallback)
-      if (!resolvedPageId) {
-        try {
-          const profileRes = await axios.get('https://api.linkedin.com/v2/me', {
-            headers: { Authorization: `Bearer ${accessToken}` },
-          });
-          resolvedPageId = profileRes.data.id || '';
-          const firstName = profileRes.data.localizedFirstName || '';
-          const lastName = profileRes.data.localizedLastName || '';
-          if (firstName || lastName) resolvedPageName = `${firstName} ${lastName}`.trim();
-          console.log(`[LinkedIn] Member ID via /v2/me: ${resolvedPageId}`);
-        } catch {
-          console.warn('[LinkedIn] /v2/me falhou (403 - sem escopo r_liteprofile)');
-        }
-      }
-
-      if (!resolvedPageId) {
-        return res.status(400).json({
-          error: 'Não foi possível obter seu Member ID automaticamente. Informe o Member ID manualmente (encontre em linkedin.com/in/SUA-URL → clique em "Mais" → "ID do LinkedIn").',
-        });
-      }
-    }
-
     const account = await prisma.socialAccount.upsert({
       where: { userId_platform: { userId: req.userId!, platform: 'linkedin' } },
-      update: { accessToken, pageId: resolvedPageId, pageName: resolvedPageName },
-      create: { userId: req.userId!, platform: 'linkedin', accessToken, pageId: resolvedPageId, pageName: resolvedPageName },
+      update: { accessToken, pageId, pageName },
+      create: { userId: req.userId!, platform: 'linkedin', accessToken, pageId, pageName },
     });
-    return res.json({ ...account, memberIdFetched: !pageId?.trim() });
-  } catch (err: any) {
-    console.error('[LinkedIn] Erro ao conectar:', err?.message);
+    return res.json(account);
+  } catch {
     return res.status(500).json({ error: 'Erro ao conectar LinkedIn' });
   }
 }
