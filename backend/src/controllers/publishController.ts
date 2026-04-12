@@ -5,6 +5,36 @@ import axios from 'axios';
 
 const prisma = new PrismaClient();
 
+async function resolveLinkedInMemberId(accessToken: string): Promise<string | null> {
+  const clientId = process.env.LINKEDIN_CLIENT_ID;
+  const clientSecret = process.env.LINKEDIN_CLIENT_SECRET;
+
+  // Método 1: Token introspection
+  if (clientId && clientSecret) {
+    try {
+      const r = await axios.post(
+        'https://api.linkedin.com/v2/introspectToken',
+        new URLSearchParams({ client_id: clientId, client_secret: clientSecret, token: accessToken }),
+        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+      );
+      const urn: string = r.data.authorizedUser || '';
+      if (urn) return urn.split(':').pop() || null;
+    } catch (e: any) {
+      console.warn('[LinkedIn] introspect falhou:', e?.response?.data);
+    }
+  }
+
+  // Método 2: /v2/me
+  try {
+    const r = await axios.get('https://api.linkedin.com/v2/me', {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    if (r.data.id) return r.data.id;
+  } catch {}
+
+  return null;
+}
+
 export async function publishPost(req: AuthRequest, res: Response) {
   try {
     const { postId } = req.body;
@@ -28,9 +58,28 @@ export async function publishPost(req: AuthRequest, res: Response) {
       );
       publishedId = resp.data.id;
     } else if (post.platform === 'linkedin') {
-      // Requer escopo w_member_social no app LinkedIn
+      let memberId = account.pageId;
+
+      // Se pageId está pendente ou vazio, tenta resolver automaticamente
+      if (!memberId || memberId === 'PENDING') {
+        console.log('[LinkedIn] Member ID pendente, tentando resolver automaticamente...');
+        const resolved = await resolveLinkedInMemberId(account.accessToken);
+        if (!resolved) {
+          return res.status(400).json({
+            error: 'Não foi possível identificar seu perfil LinkedIn. Vá em Configurações → Redes Sociais → LinkedIn e reconecte com seu Access Token.',
+          });
+        }
+        memberId = resolved;
+        // Salva para não precisar resolver toda vez
+        await prisma.socialAccount.update({
+          where: { id: account.id },
+          data: { pageId: memberId },
+        });
+        console.log(`[LinkedIn] Member ID resolvido e salvo: ${memberId}`);
+      }
+
       const body = {
-        author: `urn:li:person:${account.pageId}`,
+        author: `urn:li:person:${memberId}`,
         lifecycleState: 'PUBLISHED',
         specificContent: {
           'com.linkedin.ugc.ShareContent': {
@@ -52,7 +101,6 @@ export async function publishPost(req: AuthRequest, res: Response) {
       publishedId = resp.data.id || resp.headers['x-restli-id'] || '';
     }
 
-    // Atualiza status do post no banco
     await prisma.post.update({
       where: { id: postId },
       data: { status: 'published', publishedAt: new Date() },
@@ -64,3 +112,4 @@ export async function publishPost(req: AuthRequest, res: Response) {
     return res.status(500).json({ error: msg || 'Erro ao publicar post' });
   }
 }
+
