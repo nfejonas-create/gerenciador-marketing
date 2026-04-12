@@ -68,7 +68,7 @@ export async function getSocialAccounts(req: AuthRequest, res: Response) {
     // Token completo para preencher o campo (so retorna se existir)
     accessToken: a.accessToken || '',
     connected: !!(a.accessToken && a.accessToken.length > 10),
-    updatedAt: a.updatedAt,
+    updatedAt: a.createdAt,
   })));
 }
 
