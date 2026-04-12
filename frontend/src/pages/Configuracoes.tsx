@@ -130,13 +130,17 @@ export default function Configuracoes() {
           />
         </div>
         <div>
-          <label className="text-xs text-gray-500 block mb-1">Organization ID (deixe vazio para perfil pessoal)</label>
+          <label className="text-xs text-gray-500 block mb-1">Member ID numerico <span className="text-yellow-500">(obrigatorio para publicar)</span></label>
           <input
-            placeholder="Ex: 12345678 (ID da empresa no LinkedIn)"
+            placeholder="Ex: 123456789 — ID numerico do seu perfil"
             value={li.pageId}
             onChange={e => setLi(x => ({ ...x, pageId: e.target.value }))}
             className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
           />
+          <p className="text-xs text-gray-600 mt-1">
+            Para encontrar: abra o LinkedIn → seu perfil → F12 → aba Network → recarregue → filtre por "me?" → veja o campo "id" na resposta.
+            Ou acesse: <a href="https://www.linkedin.com/in/jonas-breitenbach-857a04167" target="_blank" rel="noreferrer" className="text-blue-500 hover:underline">seu perfil</a> → clique nos 3 pontinhos → "Copiar URL do perfil" → o numero no final nao e o ID numerico.
+          </p>
         </div>
         <div>
           <label className="text-xs text-gray-500 block mb-1">Nome (para identificar)</label>

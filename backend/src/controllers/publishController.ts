@@ -64,8 +64,16 @@ async function resolveLinkedInPersonId(accessToken: string): Promise<string> {
   );
 }
 
-async function postToLinkedIn(accessToken: string, fullText: string): Promise<string> {
-  const personId = await resolveLinkedInPersonId(accessToken);
+async function postToLinkedIn(accessToken: string, fullText: string, savedMemberId?: string | null): Promise<string> {
+  // Se o memberId foi salvo manualmente nas configs, usa direto (mais confiavel)
+  let personId = savedMemberId && /^\d+$/.test(savedMemberId.trim()) ? savedMemberId.trim() : null;
+
+  if (!personId) {
+    personId = await resolveLinkedInPersonId(accessToken);
+  } else {
+    console.log('[LinkedIn] personId via campo salvo:', personId);
+  }
+
   const author = `urn:li:person:${personId}`;
 
   const body = {
@@ -132,7 +140,8 @@ export async function publishPost(req: AuthRequest, res: Response) {
     let publishedId = '';
 
     if (post.platform === 'linkedin') {
-      publishedId = await postToLinkedIn(account.accessToken, fullText);
+      // pageId no LinkedIn e usado para armazenar o memberId numerico
+      publishedId = await postToLinkedIn(account.accessToken, fullText, account.pageId || null);
     } else if (post.platform === 'facebook') {
       if (!account.pageId) {
         return res.status(400).json({ error: 'Page ID do Facebook nao configurado. Va em Configuracoes.' });
