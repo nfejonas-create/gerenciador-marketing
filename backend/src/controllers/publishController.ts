@@ -11,10 +11,10 @@ const prisma = new PrismaClient();
 //   2. /v2/me (precisa de r_liteprofile — fallback)
 // ────────────────────────────────────────────────────────────────────────────
 async function resolveLinkedInPersonId(accessToken: string): Promise<string> {
-  // Tenta introspect (funciona com w_member_social + credenciais do app)
   const clientId = process.env.LINKEDIN_CLIENT_ID;
   const clientSecret = process.env.LINKEDIN_CLIENT_SECRET;
 
+  // Tentativa 1: introspectToken (nao precisa de r_liteprofile)
   if (clientId && clientSecret) {
     try {
       const params = new URLSearchParams({ token: accessToken, client_id: clientId, client_secret: clientSecret });
@@ -23,36 +23,44 @@ async function resolveLinkedInPersonId(accessToken: string): Promise<string> {
         params.toString(),
         { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
       );
-      const sub = introRes.data.sub; // ex: "urn:li:member:12345678" ou "12345678"
+      const sub = introRes.data.sub;
       if (sub) {
-        // Extrai só o ID numérico se vier como URN
         const numeric = String(sub).replace(/^urn:li:member:/, '');
-        if (numeric) {
-          console.log('[LinkedIn] personId via introspect:', numeric);
-          return numeric;
-        }
+        if (numeric) { console.log('[LinkedIn] personId via introspect:', numeric); return numeric; }
       }
     } catch (e: any) {
       console.warn('[LinkedIn] introspectToken falhou:', e?.response?.data || e?.message);
     }
   }
 
-  // Fallback: /v2/me (precisa de r_liteprofile)
+  // Tentativa 2: /v2/userinfo (OpenID Connect - funciona com openid profile scopes)
+  try {
+    const uiRes = await axios.get('https://api.linkedin.com/v2/userinfo', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (uiRes.data.sub) {
+      const numeric = String(uiRes.data.sub).replace(/^urn:li:member:/, '');
+      console.log('[LinkedIn] personId via userinfo:', numeric);
+      return numeric;
+    }
+  } catch (e: any) {
+    console.warn('[LinkedIn] /v2/userinfo falhou:', e?.response?.status, e?.response?.data);
+  }
+
+  // Tentativa 3: /v2/me (precisa de r_liteprofile - fallback legado)
   try {
     const meRes = await axios.get('https://api.linkedin.com/v2/me', {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
-    if (meRes.data.id) {
-      console.log('[LinkedIn] personId via /v2/me:', meRes.data.id);
-      return String(meRes.data.id);
-    }
+    if (meRes.data.id) { console.log('[LinkedIn] personId via /v2/me:', meRes.data.id); return String(meRes.data.id); }
   } catch (e: any) {
-    console.warn('[LinkedIn] /v2/me falhou (status', e?.response?.status, ')— token pode precisar de r_liteprofile');
+    console.warn('[LinkedIn] /v2/me falhou (status', e?.response?.status, ')');
   }
 
   throw new Error(
     'Nao foi possivel obter o ID do perfil LinkedIn. ' +
-    'Gere um novo token com escopo "r_liteprofile + w_member_social" nas Configuracoes.'
+    'Acesse Configuracoes > LinkedIn e cole o Access Token (comeca com AQU...). ' +
+    'Gere em: linkedin.com/developers/tools/oauth com escopos w_member_social + openid + profile'
   );
 }
 
