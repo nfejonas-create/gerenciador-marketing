@@ -14,7 +14,7 @@ async function resolveLinkedInMemberId(accessToken: string): Promise<string | nu
     try {
       const r = await axios.post(
         'https://api.linkedin.com/v2/introspectToken',
-        new URLSearchParams({ client_id: clientId, client_secret: clientSecret, token: accessToken }),
+        new URLSearchParams({ client_id: clientId, client_secret: clientSecret, token: accessToken }).toString(),
         { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
       );
       const urn: string = r.data.authorizedUser || '';
