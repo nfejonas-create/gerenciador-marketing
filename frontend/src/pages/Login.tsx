@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
 import { Zap } from 'lucide-react';
 
-const BACKEND = 'http://localhost:3001';
+const BACKEND = import.meta.env.VITE_API_URL || 'https://gerenciador-marketing-backend.onrender.com';
 
 export default function Login() {
   const [mode, setMode] = useState<'login' | 'register'>('login');
