@@ -374,7 +374,9 @@ export default function Conteudo() {
               <h3 className="text-white font-semibold">Publicar post</h3>
               <button onClick={() => setPublishModal(null)} className="text-gray-500 hover:text-gray-300"><X size={18} /></button>
             </div>
-            <p className="text-gray-400 text-sm line-clamp-3">{publishModal.post.content}</p>
+            <div className="max-h-24 overflow-y-auto bg-gray-800 rounded-lg p-3">
+              <p className="text-gray-400 text-sm">{publishModal.post.content}</p>
+            </div>
             <button onClick={() => publishPost(publishModal.post.id)} disabled={publishing === publishModal.post.id}
               className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white py-3 rounded-xl font-medium">
               <Send size={16} /> {publishing === publishModal.post.id ? 'Publicando...' : 'Publicar agora'}
@@ -456,7 +458,9 @@ export default function Conteudo() {
                           {p.angle}
                         </span>
                       </div>
-                      <p className="text-gray-200 text-sm whitespace-pre-wrap line-clamp-4">{p.content}</p>
+                      <div className="max-h-48 overflow-y-auto bg-gray-900 rounded-lg p-2">
+                        <p className="text-gray-200 text-sm whitespace-pre-wrap">{p.content}</p>
+                      </div>
                       {p.cta && <p className="text-blue-400 text-xs">CTA: {p.cta}</p>}
                       <div>
                         <label className="text-xs text-gray-500 block mb-1">Data e hora de publicacao</label>

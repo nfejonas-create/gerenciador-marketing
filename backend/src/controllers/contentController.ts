@@ -93,6 +93,14 @@ export async function generatePost(req: AuthRequest, res: Response) {
   try {
     const { topic, platform, tone, product, kbIds } = req.body;
 
+    // Buscar instrucoes da IA nas settings do usuario
+    let userAiInstructions = '';
+    try {
+      const userRecord = await prisma.user.findUnique({ where: { id: req.userId! }, select: { settings: true } });
+      const settings = (userRecord?.settings as any) || {};
+      if (settings.aiInstructions) userAiInstructions = settings.aiInstructions;
+    } catch {}
+
     let kbContext = '';
     if (kbIds && Array.isArray(kbIds) && kbIds.length > 0) {
       const items = await prisma.knowledgeBase.findMany({
@@ -118,6 +126,8 @@ Nunca inventar dados tecnicos. Basear-se no material fornecido.`;
 TEMA: ${topic}
 ${product ? `PRODUTO/LINK A MENCIONAR: ${product} — coloque o link APENAS no campo "cta" do JSON, NAO no corpo do post` : ''}
 ${tone ? `TOM ADICIONAL: ${tone}` : ''}
+
+${userAiInstructions ? `INSTRUCOES PERSONALIZADAS DO USUARIO (prioridade maxima, siga rigorosamente):\n---\n${userAiInstructions}\n---\n` : ''}
 
 ${kbContext ? `BASE DE CONHECIMENTO (use estas informacoes como fonte):\n---\n${kbContext}\n---\n` : ''}
 
@@ -315,6 +325,14 @@ export async function generateWeeklyPosts(req: AuthRequest, res: Response) {
     const { topic, platform = 'linkedin', tone = 'mix' } = req.body;
     if (!topic) return res.status(400).json({ error: 'Tema obrigatorio' });
 
+    // Buscar instrucoes da IA nas settings do usuario
+    let userAiInstructions = '';
+    try {
+      const userRecord = await prisma.user.findUnique({ where: { id: req.userId! }, select: { settings: true } });
+      const settings = (userRecord?.settings as any) || {};
+      if (settings.aiInstructions) userAiInstructions = settings.aiInstructions;
+    } catch {}
+
     const kbContext = await searchKnowledgeForTopic(req.userId!, topic);
     const template = TEMPLATES[platform as 'linkedin' | 'facebook'] || TEMPLATES.linkedin;
     const hashtags = getHashtags(topic, platform);
@@ -328,6 +346,7 @@ Tom: direto, linguagem de obra, sem academicismo, sem cliches motivacionais. Nun
 
 GERE 7 POSTS DIFERENTES sobre o tema: "${topic}"
 Plataforma: ${platform}
+${userAiInstructions ? `INSTRUCOES PERSONALIZADAS DO USUARIO (prioridade maxima):\n---\n${userAiInstructions}\n---\n` : ''}
 ${kbContext ? `BASE DE CONHECIMENTO:\n---\n${kbContext}\n---\n` : ''}
 
 Angulos obrigatorios (um por post, nessa ordem):
