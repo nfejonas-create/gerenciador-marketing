@@ -47,13 +47,25 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(passport.initialize());
 
+// Rotas de autenticação
 app.use('/auth', authRoutes);
 app.use('/api/auth', authRoutes);
-app.use('/social', socialRoutes);
-app.use('/metrics', metricsRoutes);
+
+// Rotas principais COM prefixo /api (frontend usa baseURL /api)
+app.use('/api/content', contentRoutes);
+app.use('/api/social', socialRoutes);
+app.use('/api/funnel', funnelRoutes);
+app.use('/api/knowledge', knowledgeRoutes);
+app.use('/api/metrics', metricsRoutes);
+
+// Rotas sem prefixo (compatibilidade com chamadas diretas)
 app.use('/content', contentRoutes);
+app.use('/social', socialRoutes);
 app.use('/funnel', funnelRoutes);
 app.use('/knowledge', knowledgeRoutes);
+app.use('/metrics', metricsRoutes);
+
+// Rotas de IA e v2/v3
 app.use('/api/ai', aiContentRoutes);
 app.use('/api/v2', aiV2Routes);
 app.use('/api/v3/content', v3ContentRoutes);
@@ -62,10 +74,6 @@ app.use('/api/v3/week', v3WeekRoutes);
 app.use('/api/ideas', ideasRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/analytics', analyticsRoutes);
-
-// Compatibilidade: rotas antigas do frontend apontam para v3
-app.use('/api/content/generate', v3ContentRoutes);
-app.use('/api/content/posts', v3PostsRoutes);
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 

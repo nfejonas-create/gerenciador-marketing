@@ -87,11 +87,17 @@ export default function Conteudo() {
   }, [tab]);
 
   async function loadProducts() {
-    try { const { data } = await api.get('/funnel/products'); setProducts(data); } catch {}
+    try {
+      const { data } = await api.get('/funnel/products');
+      setProducts(Array.isArray(data) ? data : []);
+    } catch { setProducts([]); }
   }
 
   async function loadPosts() {
-    try { const { data } = await api.get('/content/posts'); setPosts(data); } catch {}
+    try {
+      const { data } = await api.get('/content/posts');
+      setPosts(Array.isArray(data) ? data : []);
+    } catch { setPosts([]); }
   }
 
   async function generate() {
