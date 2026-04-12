@@ -119,8 +119,9 @@ export default function Configuracoes() {
       const r = await api.get('/social/accounts');
       setAccounts(r.data);
       alert(`${platform} conectado com sucesso!`);
-    } catch {
-      alert('Erro ao conectar');
+    } catch (err: any) {
+      const msg = err?.response?.data?.error || 'Erro ao conectar. Verifique o token.';
+      alert(msg);
     } finally {
       setSaving('');
     }
@@ -240,33 +241,45 @@ export default function Configuracoes() {
                 </span>
               )}
             </div>
-            <input
-              placeholder="Access Token"
-              value={li.accessToken}
-              onChange={(e) =>
-                setLi((x) => ({ ...x, accessToken: e.target.value }))
-              }
-              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm"
-            />
-            <input
-              placeholder="Organization ID (pageId)"
-              value={li.pageId}
-              onChange={(e) => setLi((x) => ({ ...x, pageId: e.target.value }))}
-              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm"
-            />
-            <input
-              placeholder="Nome da página"
-              value={li.pageName}
-              onChange={(e) => setLi((x) => ({ ...x, pageName: e.target.value }))}
-              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm"
-            />
+            <div className="bg-blue-900/20 border border-blue-800 rounded-lg p-3">
+              <p className="text-blue-300 text-xs">
+                <strong>Como conectar:</strong> Cole apenas o Access Token abaixo. O sistema buscará seu Member ID automaticamente. O token foi gerado em developers.linkedin.com (escopo: w_member_social).
+              </p>
+            </div>
+            <div>
+              <label className="text-sm text-gray-400 block mb-1">Access Token *</label>
+              <input
+                placeholder="AQU7XEX... (token gerado no LinkedIn Developers)"
+                value={li.accessToken}
+                onChange={(e) => setLi((x) => ({ ...x, accessToken: e.target.value }))}
+                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-gray-400 block mb-1">Member ID (opcional — preenchido automaticamente)</label>
+              <input
+                placeholder="Deixe em branco para buscar automaticamente"
+                value={li.pageId}
+                onChange={(e) => setLi((x) => ({ ...x, pageId: e.target.value }))}
+                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-gray-400 block mb-1">Nome (opcional)</label>
+              <input
+                placeholder="Seu nome no LinkedIn"
+                value={li.pageName}
+                onChange={(e) => setLi((x) => ({ ...x, pageName: e.target.value }))}
+                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm"
+              />
+            </div>
             <button
               onClick={() => connect('linkedin', li)}
               disabled={!li.accessToken || saving === 'linkedin'}
               className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm"
             >
               <Link size={14} />{' '}
-              {saving === 'linkedin' ? 'Salvando...' : 'Conectar LinkedIn'}
+              {saving === 'linkedin' ? 'Conectando...' : 'Conectar LinkedIn'}
             </button>
           </div>
 

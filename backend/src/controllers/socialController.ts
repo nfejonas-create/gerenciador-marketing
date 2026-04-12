@@ -8,12 +8,33 @@ const prisma = new PrismaClient();
 export async function connectLinkedIn(req: AuthRequest, res: Response) {
   try {
     const { accessToken, pageId, pageName } = req.body;
+
+    // Auto-busca o Member ID do LinkedIn se não fornecido
+    let resolvedPageId = pageId;
+    let resolvedPageName = pageName;
+
+    if (!resolvedPageId || resolvedPageId.trim() === '') {
+      try {
+        const profileRes = await axios.get('https://api.linkedin.com/v2/me', {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        resolvedPageId = profileRes.data.id;
+        const firstName = profileRes.data.localizedFirstName || '';
+        const lastName = profileRes.data.localizedLastName || '';
+        resolvedPageName = resolvedPageName || `${firstName} ${lastName}`.trim() || 'LinkedIn';
+        console.log(`[LinkedIn] Member ID obtido automaticamente: ${resolvedPageId}`);
+      } catch (profileErr: any) {
+        console.error('[LinkedIn] Falha ao buscar perfil:', profileErr?.response?.data || profileErr.message);
+        return res.status(400).json({ error: 'Access Token inválido ou sem permissão. Verifique o token e tente novamente.' });
+      }
+    }
+
     const account = await prisma.socialAccount.upsert({
       where: { userId_platform: { userId: req.userId!, platform: 'linkedin' } },
-      update: { accessToken, pageId, pageName },
-      create: { userId: req.userId!, platform: 'linkedin', accessToken, pageId, pageName },
+      update: { accessToken, pageId: resolvedPageId, pageName: resolvedPageName },
+      create: { userId: req.userId!, platform: 'linkedin', accessToken, pageId: resolvedPageId, pageName: resolvedPageName },
     });
-    return res.json(account);
+    return res.json({ ...account, memberIdFetched: !pageId });
   } catch {
     return res.status(500).json({ error: 'Erro ao conectar LinkedIn' });
   }
