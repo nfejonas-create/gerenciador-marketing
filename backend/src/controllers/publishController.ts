@@ -65,17 +65,37 @@ async function resolveLinkedInPersonId(accessToken: string): Promise<string> {
 }
 
 async function postToLinkedIn(accessToken: string, fullText: string, savedMemberId?: string | null): Promise<string> {
-  // Se o memberId foi salvo manualmente nas configs, usa direto (mais confiavel)
-  let personId = savedMemberId && /^\d+$/.test(savedMemberId.trim()) ? savedMemberId.trim() : null;
-
-  if (!personId) {
-    personId = await resolveLinkedInPersonId(accessToken);
-  } else {
-    console.log('[LinkedIn] personId via campo salvo:', personId);
+  // Tentativa 1: nova Posts API com urn:li:person:~ (nao precisa de memberId)
+  try {
+    const newApiBody = {
+      author: 'urn:li:person:~',
+      commentary: fullText,
+      visibility: 'PUBLIC',
+      distribution: { feedDistribution: 'MAIN_FEED', targetEntities: [], thirdPartyDistributionChannels: [] },
+      lifecycleState: 'PUBLISHED',
+      isReshareDisabledByAuthor: false,
+    };
+    const resp = await axios.post('https://api.linkedin.com/rest/posts', newApiBody, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        'LinkedIn-Version': '202401',
+        'X-Restli-Protocol-Version': '2.0.0',
+      },
+      timeout: 15000,
+    });
+    const postId = resp.headers['x-linkedin-id'] || resp.headers['x-restli-id'] || 'published';
+    console.log('[LinkedIn] Post via nova API (urn:~):', postId);
+    return postId;
+  } catch (e: any) {
+    console.warn('[LinkedIn] Nova API falhou:', e?.response?.status, e?.response?.data?.message || e?.message);
   }
 
-  const author = `urn:li:person:${personId}`;
+  // Tentativa 2: ugcPosts com memberId salvo ou resolvido
+  let personId = savedMemberId && /^\d+$/.test(savedMemberId.trim()) ? savedMemberId.trim() : null;
+  if (!personId) personId = await resolveLinkedInPersonId(accessToken);
 
+  const author = `urn:li:person:${personId}`;
   const body = {
     author,
     lifecycleState: 'PUBLISHED',
