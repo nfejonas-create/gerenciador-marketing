@@ -295,21 +295,16 @@ export default function Conteudo() {
     if (weeklyPosts.length === 0) return;
     setSavingWeekly(true);
     try {
-      let saved = 0;
-      for (let i = 0; i < weeklyPosts.length; i++) {
-        const p = weeklyPosts[i];
-        const scheduledAt = weeklySchedules[i];
+      for (const p of weeklyPosts) {
         await api.post('/content/posts', {
           platform: weeklyPlatform,
           content: p.content,
           cta: p.cta || null,
           hashtags: Array.isArray(p.hashtags) ? p.hashtags.join(' ') : (p.hashtags || null),
-          status: scheduledAt ? 'scheduled' : 'draft',
-          scheduledAt: scheduledAt || null,
+          status: 'draft',
         });
-        saved++;
       }
-      alert(`${saved} posts salvos no historico${weeklySchedules[0] ? ' e agendados' : ' como rascunhos'}!`);
+      alert(`${weeklyPosts.length} posts salvos como rascunho no Historico! Acesse a aba Historico para agendar ou publicar.`);
       setShowWeeklyModal(false);
       setWeeklyPosts([]);
       setWeeklyTopic('');
@@ -445,7 +440,7 @@ export default function Conteudo() {
             {weeklyStep === 'review' && weeklyPosts.length > 0 && (
               <>
                 <p className="text-xs text-gray-500">
-                  Ajuste o dia e horario de cada post. Se deixar em branco, vai salvar como rascunho.
+                  Revise cada post. Ao salvar, todos vao para o Historico como rascunho. Depois agende pelo Historico.
                 </p>
                 <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
                   {weeklyPosts.map((p: any, i: number) => (
@@ -462,12 +457,6 @@ export default function Conteudo() {
                         <p className="text-gray-200 text-sm whitespace-pre-wrap">{p.content}</p>
                       </div>
                       {p.cta && <p className="text-blue-400 text-xs">CTA: {p.cta}</p>}
-                      <div>
-                        <label className="text-xs text-gray-500 block mb-1">Data e hora de publicacao</label>
-                        <input type="datetime-local" value={weeklySchedules[i] || ''}
-                          onChange={e => setWeeklySchedules(prev => ({ ...prev, [i]: e.target.value }))}
-                          className="w-full bg-gray-900 border border-gray-600 rounded-lg px-2 py-1.5 text-white text-sm" />
-                      </div>
                     </div>
                   ))}
                 </div>
