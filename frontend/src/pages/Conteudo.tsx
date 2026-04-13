@@ -188,11 +188,19 @@ export default function Conteudo() {
     } catch { alert('Erro ao salvar'); }
   }
 
+  // Converte datetime-local (ex: "2026-04-13T20:12") para ISO UTC corrigindo timezone do browser
+  function localToISO(datetimeLocal: string): string {
+    // datetime-local retorna horário local sem timezone — forçar interpretação correta
+    const d = new Date(datetimeLocal);
+    return d.toISOString();
+  }
+
   async function publishPost(postId: string, scheduledAt?: string) {
     setPublishing(postId);
     try {
       if (scheduledAt) {
-        await api.patch(`/content/posts/${postId}`, { status: 'scheduled', scheduledAt });
+        const isoDate = localToISO(scheduledAt);
+        await api.patch(`/content/posts/${postId}`, { status: 'scheduled', scheduledAt: isoDate });
         alert('Post agendado com sucesso!');
       } else {
         await api.post('/content/publish', { postId });
@@ -205,6 +213,15 @@ export default function Conteudo() {
       loadPosts();
     } catch (e: any) { alert(e.response?.data?.error || 'Erro ao publicar'); }
     finally { setPublishing(null); }
+  }
+
+  async function cancelSchedule(postId: string) {
+    if (!confirm('Cancelar agendamento e voltar para rascunho?')) return;
+    try {
+      await api.patch(`/content/posts/${postId}`, { status: 'draft', scheduledAt: null });
+      loadPosts();
+      setPublishModal(null);
+    } catch { alert('Erro ao cancelar agendamento'); }
   }
 
   function handleDrop(e: React.DragEvent) {
@@ -423,6 +440,12 @@ export default function Conteudo() {
                 className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white py-2 rounded-xl text-sm">
                 <Calendar size={14} /> {publishModal.post.status === 'scheduled' ? 'Confirmar reagendamento' : 'Agendar'}
               </button>
+              {publishModal.post.status === 'scheduled' && (
+                <button onClick={() => cancelSchedule(publishModal.post.id)}
+                  className="w-full flex items-center justify-center gap-2 bg-red-900 hover:bg-red-800 text-red-300 py-2 rounded-xl text-sm mt-1">
+                  <X size={14} /> Cancelar agendamento (voltar para rascunho)
+                </button>
+              )}
             </div>
           </div>
         </div>
