@@ -1,6 +1,8 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, FileText, TrendingUp, Calendar, Settings, LogOut, Zap, Database } from 'lucide-react';
+import { LayoutDashboard, FileText, TrendingUp, Calendar, Settings, LogOut, Zap, Database, Clock } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useEffect, useState } from 'react';
+import api from '../services/api';
 
 const links = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -11,8 +13,32 @@ const links = [
   { to: '/configuracoes', icon: Settings, label: 'Configuracoes' },
 ];
 
+// Versão do sistema - atualizar a cada deploy
+const SYSTEM_VERSION = '2.1.0';
+
 export default function Sidebar() {
   const { user, logout } = useAuth();
+  const [serverTime, setServerTime] = useState('');
+
+  useEffect(() => {
+    const fetchServerTime = async () => {
+      try {
+        const { data } = await api.get('/health');
+        if (data?.serverTime) {
+          setServerTime(new Date(data.serverTime).toLocaleString('pt-BR', {
+            day: '2-digit', month: '2-digit', year: 'numeric',
+            hour: '2-digit', minute: '2-digit', second: '2-digit'
+          }));
+        }
+      } catch {
+        setServerTime('');
+      }
+    };
+    fetchServerTime();
+    const interval = setInterval(fetchServerTime, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <aside className="w-64 bg-gray-900 border-r border-gray-800 flex flex-col">
       <div className="p-6 border-b border-gray-800">
@@ -20,6 +46,7 @@ export default function Sidebar() {
           <Zap className="text-blue-500" size={24} />
           <span className="font-bold text-white text-lg">MktManager</span>
         </div>
+        <p className="text-xs text-gray-500 mt-1">v{SYSTEM_VERSION}</p>
       </div>
       <nav className="flex-1 p-4 space-y-1">
         {links.map(({ to, icon: Icon, label }) => (
@@ -31,9 +58,15 @@ export default function Sidebar() {
           </NavLink>
         ))}
       </nav>
-      <div className="p-4 border-t border-gray-800">
+      <div className="p-4 border-t border-gray-800 space-y-3">
+        {serverTime && (
+          <div className="flex items-center gap-2 text-xs text-yellow-400 bg-yellow-900/20 px-3 py-2 rounded-lg">
+            <Clock size={14} />
+            <span>Server: {serverTime}</span>
+          </div>
+        )}
         {user && (
-          <div className="flex items-center gap-3 mb-3">
+          <div className="flex items-center gap-3">
             {user.avatar ? <img src={user.avatar} className="w-8 h-8 rounded-full" alt={user.name} /> : <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-sm font-bold">{user.name[0]}</div>}
             <div className="min-w-0"><p className="text-sm font-medium text-white truncate">{user.name}</p><p className="text-xs text-gray-400 truncate">{user.email}</p></div>
           </div>

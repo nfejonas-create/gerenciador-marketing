@@ -28,7 +28,7 @@ app.use('/content', contentRoutes);
 app.use('/funnel', funnelRoutes);
 app.use('/knowledge', knowledgeRoutes);
 
-app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+app.get('/health', (_req, res) => res.json({ status: 'ok', serverTime: new Date().toISOString() }));
 
 app.use(errorHandler);
 
