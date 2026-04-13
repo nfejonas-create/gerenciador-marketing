@@ -120,6 +120,16 @@ export default function Calendario() {
                       </span>
                     </div>
                     <p className="text-gray-500 text-xs">{getDayLabel(ref)}</p>
+                    {post.status === 'scheduled' && post.scheduledAt && (
+                      <p className="text-yellow-400 text-xs flex items-center gap-1">
+                        <Clock size={10} /> Agendado para: {new Date(post.scheduledAt).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' })}
+                      </p>
+                    )}
+                    {post.status === 'published' && post.publishedAt && (
+                      <p className="text-green-400 text-xs flex items-center gap-1">
+                        <Send size={10} /> Publicado em: {new Date(post.publishedAt).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' })}
+                      </p>
+                    )}
                     {/* Texto completo com rolagem */}
                     <div className="max-h-28 overflow-y-auto pr-1">
                       <p className="text-gray-200 text-sm whitespace-pre-wrap">{post.content}</p>
