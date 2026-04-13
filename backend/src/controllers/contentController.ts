@@ -304,6 +304,18 @@ export async function updatePost(req: AuthRequest, res: Response) {
   }
 }
 
+export async function deletePost(req: AuthRequest, res: Response) {
+  try {
+    const { id } = req.params;
+    await prisma.post.deleteMany({
+      where: { id, userId: req.userId! },
+    });
+    return res.json({ success: true, message: 'Post excluido com sucesso' });
+  } catch {
+    return res.status(500).json({ error: 'Erro ao excluir post' });
+  }
+}
+
 export async function scheduleBatch(req: AuthRequest, res: Response) {
   try {
     const { items } = req.body as { items: { postId: string; scheduledAt: string }[] };

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   Sparkles, Save, Clock, CheckCircle, Upload, FileText, Image as ImageIcon,
   X, Send, Calendar, ChevronDown, Package, Zap, BookOpen, Star, Target,
-  MessageSquare, Copy, CalendarDays, PlusCircle, LayoutList
+  MessageSquare, Copy, CalendarDays, PlusCircle, LayoutList, Trash2
 } from 'lucide-react';
 import api from '../services/api';
 
@@ -110,14 +110,17 @@ export default function Conteudo() {
   }
 
   // Aplica agendamento recorrente: distribui selecionados dia a dia a partir da base
+  // Horário de Brasília (UTC-3) convertido para UTC
   function applyRecurring() {
     if (!recurringBase) return;
-    const base = new Date(recurringBase);
+    const [datePart, timePart] = recurringBase.split('T');
+    const [year, month, day] = datePart.split('-').map(Number);
+    const [hour, minute] = timePart.split(':').map(Number);
+    
     const updated: Record<string, string> = { ...batchSchedules };
     batchSelected.forEach((id, idx) => {
-      const d = new Date(base);
-      d.setDate(d.getDate() + idx);
-      updated[id] = d.toISOString().slice(0, 16); // formato datetime-local
+      const d = new Date(Date.UTC(year, month - 1, day + idx, hour + 3, minute));
+      updated[id] = d.toISOString(); // formato ISO UTC
     });
     setBatchSchedules(updated);
   }
@@ -188,10 +191,20 @@ export default function Conteudo() {
     } catch { alert('Erro ao salvar'); }
   }
 
-  // Converte datetime-local (ex: "2026-04-13T20:12") para ISO UTC corrigindo timezone do browser
+  // Converte datetime-local (horário de Brasília UTC-3) para ISO UTC
+  // O usuário digita no horário de Brasília, convertemos para UTC
   function localToISO(datetimeLocal: string): string {
-    // datetime-local retorna horário local sem timezone — forçar interpretação correta
-    const d = new Date(datetimeLocal);
+    // datetime-local vem como "2026-04-13T20:12" (sem timezone)
+    // Interpretar como horário de Brasília (UTC-3) e converter para UTC
+    const [datePart, timePart] = datetimeLocal.split('T');
+    const [year, month, day] = datePart.split('-').map(Number);
+    const [hour, minute] = timePart.split(':').map(Number);
+    
+    // Criar data em UTC-3 (Brasília) e converter para UTC
+    // Brasília = UTC-3, então adicionamos 3 horas para converter para UTC
+    const utcHour = hour + 3;
+    
+    const d = new Date(Date.UTC(year, month - 1, day, utcHour, minute));
     return d.toISOString();
   }
 
@@ -257,6 +270,17 @@ export default function Conteudo() {
     await navigator.clipboard.writeText(parts.join('\n\n'));
     setCopiedPostId(post.id);
     setTimeout(() => setCopiedPostId(null), 2000);
+  }
+
+  async function deletePostHandler(postId: string) {
+    if (!confirm('Tem certeza que deseja excluir este post? Esta ação não pode ser desfeita.')) return;
+    try {
+      await api.delete(`/content/posts/${postId}`);
+      loadPosts();
+      alert('Post excluído com sucesso!');
+    } catch {
+      alert('Erro ao excluir post');
+    }
   }
 
   async function confirmBatchSchedule() {
@@ -430,6 +454,9 @@ export default function Conteudo() {
             <div className="border-t border-gray-800 pt-4 space-y-3">
               <p className="text-sm text-gray-400">
                 {publishModal.post.status === 'scheduled' ? 'Nova data e hora:' : 'Ou agendar para:'}
+              </p>
+              <p className="text-xs text-yellow-500">
+                💡 Digite o horário de Brasília (UTC-3). Ex: 20:00 = 8 da noite no Brasil.
               </p>
               <input type="datetime-local"
                 value={scheduleDate || (publishModal.post.scheduledAt ? publishModal.post.scheduledAt.slice(0,16) : '')}
@@ -949,6 +976,10 @@ export default function Conteudo() {
                     <Send size={13} /> {post.status === 'scheduled' ? 'Reagendar' : 'Publicar / Agendar'}
                   </button>
                 )}
+                <button onClick={() => deletePostHandler(post.id)}
+                  className="flex items-center gap-1.5 bg-red-900 hover:bg-red-800 text-red-300 text-sm px-3 py-1.5 rounded-lg transition-colors">
+                  <Trash2 size={13} /> Excluir
+                </button>
               </div>
             </div>
           ))}

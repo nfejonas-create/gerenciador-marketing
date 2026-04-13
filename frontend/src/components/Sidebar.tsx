@@ -19,19 +19,29 @@ const SYSTEM_VERSION = '2.1.0';
 export default function Sidebar() {
   const { user, logout } = useAuth();
   const [serverTime, setServerTime] = useState('');
+  const [localTime, setLocalTime] = useState('');
 
   useEffect(() => {
     const fetchServerTime = async () => {
       try {
         const { data } = await api.get('/health');
         if (data?.serverTime) {
-          setServerTime(new Date(data.serverTime).toLocaleString('pt-BR', {
+          const serverDate = new Date(data.serverTime);
+          setServerTime(serverDate.toLocaleString('pt-BR', {
             day: '2-digit', month: '2-digit', year: 'numeric',
-            hour: '2-digit', minute: '2-digit', second: '2-digit'
-          }));
+            hour: '2-digit', minute: '2-digit', second: '2-digit',
+            timeZone: 'UTC'
+          }) + ' UTC');
+          // Converter para horário de Brasília (UTC-3)
+          setLocalTime(serverDate.toLocaleString('pt-BR', {
+            day: '2-digit', month: '2-digit', year: 'numeric',
+            hour: '2-digit', minute: '2-digit', second: '2-digit',
+            timeZone: 'America/Sao_Paulo'
+          }) + ' BRT');
         }
       } catch {
         setServerTime('');
+        setLocalTime('');
       }
     };
     fetchServerTime();
@@ -60,9 +70,15 @@ export default function Sidebar() {
       </nav>
       <div className="p-4 border-t border-gray-800 space-y-3">
         {serverTime && (
-          <div className="flex items-center gap-2 text-xs text-yellow-400 bg-yellow-900/20 px-3 py-2 rounded-lg">
-            <Clock size={14} />
-            <span>Server: {serverTime}</span>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 text-xs text-yellow-400 bg-yellow-900/20 px-3 py-1.5 rounded-lg">
+              <Clock size={12} />
+              <span>{serverTime}</span>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-green-400 bg-green-900/20 px-3 py-1.5 rounded-lg">
+              <Clock size={12} />
+              <span>{localTime} (Brasil)</span>
+            </div>
           </div>
         )}
         {user && (
