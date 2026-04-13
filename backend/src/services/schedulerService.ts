@@ -8,36 +8,44 @@ export async function runScheduler() {
     const now = new Date();
     console.log(`[Scheduler] Verificando. Agora: ${now.toISOString()}`);
 
-    const postsToPublish = await prisma.post.findMany({
-      where: { status: 'scheduled', scheduledAt: { lte: now } },
-      include: { user: { include: { socialAccounts: true } } },
-    });
+    // Usar SQL raw para garantir que a comparacao de timestamp funciona corretamente
+    const postsRaw = await prisma.$queryRaw<any[]>`
+      SELECT p.*, u.id as "userId2",
+             sa."accessToken", sa."pageId", sa."pageName", sa."platform" as "saPlatform"
+      FROM "Post" p
+      JOIN "User" u ON p."userId" = u.id
+      LEFT JOIN "SocialAccount" sa ON sa."userId" = u.id AND sa.platform = p.platform
+      WHERE p.status = 'scheduled'
+        AND p."scheduledAt" IS NOT NULL
+        AND p."scheduledAt" <= ${now}
+    `;
 
-    console.log(`[Scheduler] Posts para publicar: ${postsToPublish.length}`);
+    console.log(`[Scheduler] Posts encontrados via SQL: ${postsRaw.length}`);
     const results: { postId: string; platform: string; status: string; error?: string }[] = [];
 
-    for (const post of postsToPublish) {
-      const account = post.user.socialAccounts.find(a => a.platform === post.platform);
-      if (!account) {
-        await prisma.post.update({ where: { id: post.id }, data: { status: 'error_no_account' } });
-        results.push({ postId: post.id, platform: post.platform, status: 'error_no_account' });
+    for (const row of postsRaw) {
+      if (!row.accessToken) {
+        await prisma.post.update({ where: { id: row.id }, data: { status: 'error_no_account' } });
+        results.push({ postId: row.id, platform: row.platform, status: 'error_no_account' });
         continue;
       }
       try {
-        if (post.platform === 'linkedin') await publishToLinkedIn(post, account.accessToken, account.pageId);
-        else if (post.platform === 'facebook') await publishToFacebook(post, account.accessToken, account.pageId);
+        const post = { id: row.id, content: row.content, cta: row.cta, hashtags: row.hashtags };
+        if (row.platform === 'linkedin') await publishToLinkedIn(post, row.accessToken, row.pageId);
+        else if (row.platform === 'facebook') await publishToFacebook(post, row.accessToken, row.pageId);
 
-        await prisma.post.update({ where: { id: post.id }, data: { status: 'published', publishedAt: new Date() } });
-        results.push({ postId: post.id, platform: post.platform, status: 'published' });
+        await prisma.post.update({ where: { id: row.id }, data: { status: 'published', publishedAt: new Date() } });
+        console.log(`[Scheduler] Post ${row.id} publicado no ${row.platform}`);
+        results.push({ postId: row.id, platform: row.platform, status: 'published' });
       } catch (publishErr: any) {
         const errMsg = publishErr?.response?.data?.message || publishErr?.response?.data?.error?.message || String(publishErr.message);
-        console.error(`[Scheduler] Erro post ${post.id}:`, errMsg);
-        await prisma.post.update({ where: { id: post.id }, data: { status: 'error_publish' } });
-        results.push({ postId: post.id, platform: post.platform, status: 'error_publish', error: errMsg });
+        console.error(`[Scheduler] Erro post ${row.id}:`, errMsg);
+        await prisma.post.update({ where: { id: row.id }, data: { status: 'error_publish' } });
+        results.push({ postId: row.id, platform: row.platform, status: 'error_publish', error: errMsg });
       }
     }
 
-    return { checked: postsToPublish.length, now: now.toISOString(), results };
+    return { checked: postsRaw.length, now: now.toISOString(), results };
   } finally {
     await prisma.$disconnect();
   }
