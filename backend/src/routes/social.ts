@@ -14,7 +14,7 @@ router.post('/scheduler/trigger', async (req: Request, res: Response) => {
   }
   try {
     const result = await runScheduler();
-    return res.json({ ok: true, ...result });
+    return res.json({ ok: true, serverTime: new Date().toISOString(), ...result });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
