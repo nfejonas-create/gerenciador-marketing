@@ -81,14 +81,57 @@ async function publishToLinkedIn(
         'LinkedIn-Version': '202401',
         'X-Restli-Protocol-Version': '2.0.0',
       },
-      timeout: 15000,
+      timeout: 10000,
     });
     const postId = resp.headers['x-linkedin-id'] || resp.headers['x-restli-id'] || 'published';
-    console.log('[Scheduler LinkedIn] Publicado:', postId);
+    console.log('[Scheduler LinkedIn] Publicado via nova API:', postId);
     return postId;
   } catch (e: any) {
     console.warn('[Scheduler LinkedIn] Nova API falhou:', e?.response?.status, e?.response?.data?.message);
-    throw e;
+  }
+
+  // Tentativa 2: API legada ugcPosts (mais estável)
+  try {
+    // Obter memberId
+    let memberId: string | null = null;
+    try {
+      const ui = await axios.get('https://api.linkedin.com/v2/userinfo', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        timeout: 5000,
+      });
+      memberId = ui.data.sub;
+    } catch {
+      const me = await axios.get('https://api.linkedin.com/v2/me', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        timeout: 5000,
+      });
+      memberId = me.data.id;
+    }
+    if (!memberId) throw new Error('Nao foi possivel obter memberId');
+
+    const resp = await axios.post('https://api.linkedin.com/v2/ugcPosts', {
+      author: `urn:li:person:${memberId}`,
+      lifecycleState: 'PUBLISHED',
+      specificContent: {
+        'com.linkedin.ugc.ShareContent': {
+          shareCommentary: { text: fullText },
+          shareMediaCategory: 'NONE',
+        },
+      },
+      visibility: { 'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC' },
+    }, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        'X-Restli-Protocol-Version': '2.0.0',
+      },
+      timeout: 10000,
+    });
+    console.log('[Scheduler LinkedIn] Publicado via ugcPosts');
+    return 'published';
+  } catch (e2: any) {
+    console.error('[Scheduler LinkedIn] ugcPosts também falhou:', e2?.response?.status, e2?.response?.data?.message);
+    throw e2;
   }
 }
 
