@@ -8,7 +8,6 @@ export async function runScheduler() {
     const now = new Date();
     console.log(`[Scheduler] Verificando. Agora: ${now.toISOString()}`);
 
-    // Usar SQL raw para garantir que a comparacao de timestamp funciona corretamente
     const postsRaw = await prisma.$queryRaw<any[]>`
       SELECT p.*, u.id as "userId2",
              sa."accessToken", sa."pageId", sa."pageName", sa."platform" as "saPlatform"
@@ -20,7 +19,7 @@ export async function runScheduler() {
         AND p."scheduledAt" <= ${now}
     `;
 
-    console.log(`[Scheduler] Posts encontrados via SQL: ${postsRaw.length}`);
+    console.log(`[Scheduler] Posts encontrados: ${postsRaw.length}`);
     const results: { postId: string; platform: string; status: string; error?: string }[] = [];
 
     for (const row of postsRaw) {
@@ -31,7 +30,7 @@ export async function runScheduler() {
       }
       try {
         const post = { id: row.id, content: row.content, cta: row.cta, hashtags: row.hashtags };
-        if (row.platform === 'linkedin') await publishToLinkedIn(post, row.accessToken, row.pageId);
+        if (row.platform === 'linkedin') await publishToLinkedIn(post, row.accessToken);
         else if (row.platform === 'facebook') await publishToFacebook(post, row.accessToken, row.pageId);
 
         await prisma.post.update({ where: { id: row.id }, data: { status: 'published', publishedAt: new Date() } });
@@ -63,36 +62,34 @@ cron.schedule('*/5 * * * *', async () => {
 async function publishToLinkedIn(
   post: { id: string; content: string; hashtags?: string | null; cta?: string | null },
   accessToken: string,
-  pageId?: string | null,
 ) {
   const fullText = [post.content, post.cta || '', post.hashtags || ''].filter(Boolean).join('\n\n').trim();
-  let memberId = pageId;
-  if (!memberId) {
-    try {
-      const ui = await axios.get('https://api.linkedin.com/v2/userinfo', { headers: { Authorization: `Bearer ${accessToken}` } });
-      memberId = ui.data.sub;
-    } catch {
-      const me = await axios.get('https://api.linkedin.com/v2/me', { headers: { Authorization: `Bearer ${accessToken}` } });
-      memberId = me.data.id;
-    }
-  }
-  if (!memberId) throw new Error('memberId LinkedIn nao encontrado');
 
-  await axios.post('https://api.linkedin.com/rest/posts', {
-    author: `urn:li:person:${memberId}`,
-    commentary: fullText,
-    visibility: 'PUBLIC',
-    distribution: { feedDistribution: 'MAIN_FEED', targetEntities: [], thirdPartyDistributionChannels: [] },
-    lifecycleState: 'PUBLISHED',
-    isReshareDisabledByAuthor: false,
-  }, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-      'LinkedIn-Version': '202401',
-      'X-Restli-Protocol-Version': '2.0.0',
-    },
-  });
+  // Tentativa 1: nova Posts API com urn:li:person:~ (igual ao publishController)
+  try {
+    const resp = await axios.post('https://api.linkedin.com/rest/posts', {
+      author: 'urn:li:person:~',
+      commentary: fullText,
+      visibility: 'PUBLIC',
+      distribution: { feedDistribution: 'MAIN_FEED', targetEntities: [], thirdPartyDistributionChannels: [] },
+      lifecycleState: 'PUBLISHED',
+      isReshareDisabledByAuthor: false,
+    }, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        'LinkedIn-Version': '202401',
+        'X-Restli-Protocol-Version': '2.0.0',
+      },
+      timeout: 15000,
+    });
+    const postId = resp.headers['x-linkedin-id'] || resp.headers['x-restli-id'] || 'published';
+    console.log('[Scheduler LinkedIn] Publicado:', postId);
+    return postId;
+  } catch (e: any) {
+    console.warn('[Scheduler LinkedIn] Nova API falhou:', e?.response?.status, e?.response?.data?.message);
+    throw e;
+  }
 }
 
 async function publishToFacebook(
