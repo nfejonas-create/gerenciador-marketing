@@ -55,25 +55,48 @@ cron.schedule('*/5 * * * *', async () => {
 async function publishToLinkedIn(
   post: { id: string; content: string; hashtags?: string | null; cta?: string | null },
   accessToken: string,
-  pageId?: string | null,
+  pageId?: string | null, // pageId armazena o memberId (ex: dWcJknqJau)
 ) {
-  const profileRes = await axios.get('https://api.linkedin.com/v2/me', {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  const authorUrn = pageId ? `urn:li:organization:${pageId}` : `urn:li:person:${profileRes.data.id}`;
   const fullText = [post.content, post.cta || '', post.hashtags || ''].filter(Boolean).join('\n\n').trim();
 
-  await axios.post('https://api.linkedin.com/v2/ugcPosts', {
-    author: authorUrn,
-    lifecycleState: 'PUBLISHED',
-    specificContent: {
-      'com.linkedin.ugc.ShareContent': {
-        shareCommentary: { text: fullText },
-        shareMediaCategory: 'NONE',
-      },
+  // Obter memberId: usa pageId salvo no banco, senão chama /v2/userinfo (openid scope)
+  let memberId = pageId;
+  if (!memberId) {
+    try {
+      const ui = await axios.get('https://api.linkedin.com/v2/userinfo', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      memberId = ui.data.sub;
+    } catch {
+      const me = await axios.get('https://api.linkedin.com/v2/me', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      memberId = me.data.id;
+    }
+  }
+
+  if (!memberId) throw new Error('Nao foi possivel obter memberId do LinkedIn');
+
+  // Nova REST API do LinkedIn (202401)
+  await axios.post('https://api.linkedin.com/rest/posts', {
+    author: `urn:li:person:${memberId}`,
+    commentary: fullText,
+    visibility: 'PUBLIC',
+    distribution: {
+      feedDistribution: 'MAIN_FEED',
+      targetEntities: [],
+      thirdPartyDistributionChannels: [],
     },
-    visibility: { 'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC' },
-  }, { headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' } });
+    lifecycleState: 'PUBLISHED',
+    isReshareDisabledByAuthor: false,
+  }, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+      'LinkedIn-Version': '202401',
+      'X-Restli-Protocol-Version': '2.0.0',
+    },
+  });
 }
 
 async function publishToFacebook(
