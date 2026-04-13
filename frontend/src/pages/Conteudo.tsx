@@ -64,6 +64,8 @@ export default function Conteudo() {
   const [batchSelected, setBatchSelected] = useState<string[]>([]);
   const [batchSchedules, setBatchSchedules] = useState<Record<string, string>>({});
   const [schedulingBatch, setSchedulingBatch] = useState(false);
+  const [recurringBase, setRecurringBase] = useState(''); // data/hora base para recorrente
+  const [recurringTime, setRecurringTime] = useState('08:00'); // horario fixo
 
   // Importar post pronto
   const [importContent, setImportContent] = useState('');
@@ -92,7 +94,32 @@ export default function Conteudo() {
   }
 
   async function loadPosts() {
-    try { const { data } = await api.get('/content/posts'); setPosts(data); } catch {}
+    try {
+      const { data } = await api.get('/content/posts');
+      // Ordenar: agendados por data (mais próximo primeiro), depois rascunhos, depois publicados
+      const sorted = [...data].sort((a: SavedPost, b: SavedPost) => {
+        const order = (p: SavedPost) => p.status === 'scheduled' ? 0 : p.status === 'draft' ? 1 : 2;
+        if (order(a) !== order(b)) return order(a) - order(b);
+        if (a.status === 'scheduled' && b.status === 'scheduled') {
+          return new Date(a.scheduledAt!).getTime() - new Date(b.scheduledAt!).getTime();
+        }
+        return new Date(b.scheduledAt || 0).getTime() - new Date(a.scheduledAt || 0).getTime();
+      });
+      setPosts(sorted);
+    } catch {}
+  }
+
+  // Aplica agendamento recorrente: distribui selecionados dia a dia a partir da base
+  function applyRecurring() {
+    if (!recurringBase) return;
+    const base = new Date(recurringBase);
+    const updated: Record<string, string> = { ...batchSchedules };
+    batchSelected.forEach((id, idx) => {
+      const d = new Date(base);
+      d.setDate(d.getDate() + idx);
+      updated[id] = d.toISOString().slice(0, 16); // formato datetime-local
+    });
+    setBatchSchedules(updated);
   }
 
   async function generate() {
@@ -366,9 +393,16 @@ export default function Conteudo() {
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-md space-y-5">
             <div className="flex items-center justify-between">
-              <h3 className="text-white font-semibold">Publicar post</h3>
+              <h3 className="text-white font-semibold">
+                {publishModal.post.status === 'scheduled' ? 'Reagendar post' : 'Publicar / Agendar'}
+              </h3>
               <button onClick={() => setPublishModal(null)} className="text-gray-500 hover:text-gray-300"><X size={18} /></button>
             </div>
+            {publishModal.post.status === 'scheduled' && publishModal.post.scheduledAt && (
+              <p className="text-yellow-400 text-xs flex items-center gap-1">
+                <Clock size={12} /> Agendado para: {new Date(publishModal.post.scheduledAt).toLocaleString('pt-BR')}
+              </p>
+            )}
             <div className="max-h-24 overflow-y-auto bg-gray-800 rounded-lg p-3">
               <p className="text-gray-400 text-sm">{publishModal.post.content}</p>
             </div>
@@ -377,13 +411,17 @@ export default function Conteudo() {
               <Send size={16} /> {publishing === publishModal.post.id ? 'Publicando...' : 'Publicar agora'}
             </button>
             <div className="border-t border-gray-800 pt-4 space-y-3">
-              <p className="text-sm text-gray-400">Ou agendar para:</p>
-              <input type="datetime-local" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)}
+              <p className="text-sm text-gray-400">
+                {publishModal.post.status === 'scheduled' ? 'Nova data e hora:' : 'Ou agendar para:'}
+              </p>
+              <input type="datetime-local"
+                value={scheduleDate || (publishModal.post.scheduledAt ? publishModal.post.scheduledAt.slice(0,16) : '')}
+                onChange={e => setScheduleDate(e.target.value)}
                 className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" />
               <button onClick={() => scheduleDate && publishPost(publishModal.post.id, scheduleDate)}
                 disabled={!scheduleDate || publishing === publishModal.post.id}
                 className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white py-2 rounded-xl text-sm">
-                <Calendar size={14} /> Agendar
+                <Calendar size={14} /> {publishModal.post.status === 'scheduled' ? 'Confirmar reagendamento' : 'Agendar'}
               </button>
             </div>
           </div>
@@ -489,12 +527,31 @@ export default function Conteudo() {
             </div>
             <p className="text-xs text-gray-500">Selecione os posts e defina data/hora individual para cada um.</p>
 
-            {posts.filter(p => p.status === 'draft').length === 0 && (
-              <p className="text-gray-600 text-sm text-center py-4">Nenhum rascunho disponivel.</p>
+            {/* Agendamento recorrente */}
+            <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 space-y-3">
+              <p className="text-sm font-medium text-purple-300 flex items-center gap-2">
+                <CalendarDays size={14} /> Agendamento recorrente (1 post por dia)
+              </p>
+              <p className="text-xs text-gray-500">Escolha a data do 1º post — os outros seguem automaticamente (+1 dia cada).</p>
+              <div className="flex gap-2 flex-wrap items-end">
+                <div className="flex-1 min-w-[180px]">
+                  <label className="text-xs text-gray-500 block mb-1">Data e hora do 1º post</label>
+                  <input type="datetime-local" value={recurringBase} onChange={e => setRecurringBase(e.target.value)}
+                    className="w-full bg-gray-900 border border-gray-600 rounded-lg px-2 py-1.5 text-white text-sm" />
+                </div>
+                <button onClick={applyRecurring} disabled={!recurringBase || batchSelected.length === 0}
+                  className="flex items-center gap-1.5 bg-purple-700 hover:bg-purple-600 disabled:opacity-40 text-white text-sm px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap">
+                  <Zap size={13} /> Aplicar a {batchSelected.length} selecionado(s)
+                </button>
+              </div>
+            </div>
+
+            {posts.filter(p => p.status === 'draft' || p.status === 'scheduled').length === 0 && (
+              <p className="text-gray-600 text-sm text-center py-4">Nenhum rascunho ou agendado disponivel.</p>
             )}
 
             <div className="space-y-3">
-              {posts.filter(p => p.status === 'draft').map(post => (
+              {posts.filter(p => p.status === 'draft' || p.status === 'scheduled').map(post => (
                 <div key={post.id} className={`rounded-xl border p-3 space-y-2 transition-colors ${batchSelected.includes(post.id) ? 'border-purple-500 bg-purple-900/20' : 'border-gray-700 bg-gray-800'}`}>
                   <label className="flex items-start gap-3 cursor-pointer">
                     <input type="checkbox" checked={batchSelected.includes(post.id)}
@@ -502,6 +559,9 @@ export default function Conteudo() {
                       className="mt-1 accent-purple-500" />
                     <div className="flex-1 min-w-0">
                       <span className={`text-xs px-1.5 py-0.5 rounded mr-2 ${post.platform === 'linkedin' ? 'bg-blue-900 text-blue-300' : 'bg-indigo-900 text-indigo-300'}`}>{post.platform}</span>
+                      {post.status === 'scheduled' && post.scheduledAt && (
+                        <span className="text-xs text-yellow-400 mr-2">Agendado: {new Date(post.scheduledAt).toLocaleString('pt-BR')}</span>
+                      )}
                       <span className="text-gray-300 text-sm">{post.content.substring(0, 80)}...</span>
                     </div>
                   </label>
@@ -863,7 +923,7 @@ export default function Conteudo() {
                 {post.status !== 'published' && (
                   <button onClick={() => setPublishModal({ post })}
                     className="flex items-center gap-1.5 bg-green-700 hover:bg-green-600 text-white text-sm px-3 py-1.5 rounded-lg transition-colors">
-                    <Send size={13} /> Publicar / Agendar
+                    <Send size={13} /> {post.status === 'scheduled' ? 'Reagendar' : 'Publicar / Agendar'}
                   </button>
                 )}
               </div>
