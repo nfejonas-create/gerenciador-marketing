@@ -93,12 +93,16 @@ export async function generatePost(req: AuthRequest, res: Response) {
   try {
     const { topic, platform, tone, product, kbIds } = req.body;
 
-    // Buscar instrucoes da IA nas settings do usuario
+    // Buscar dados do usuario e instrucoes personalizadas
     let userAiInstructions = '';
+    let userName = 'Jonas';
+    let userNiche = 'eletricidade industrial';
     try {
-      const userRecord = await prisma.user.findUnique({ where: { id: req.userId! }, select: { settings: true } });
+      const userRecord = await prisma.user.findUnique({ where: { id: req.userId! }, select: { name: true, settings: true } });
+      userName = userRecord?.name?.split(' ')[0] || 'Jonas';
       const settings = (userRecord?.settings as any) || {};
-      if (settings.aiInstructions) userAiInstructions = settings.aiInstructions;
+      userAiInstructions = settings.generatorInstructions || settings.aiInstructions || '';
+      userNiche = settings.niche || 'eletricidade industrial';
     } catch {}
 
     let kbContext = '';
@@ -115,16 +119,15 @@ export async function generatePost(req: AuthRequest, res: Response) {
     const hashtags = getHashtags(topic, platform || 'linkedin');
     const template = TEMPLATES[platform as 'linkedin' | 'facebook'] || TEMPLATES.linkedin;
 
-    const systemPrompt = `Voce e o assistente de conteudo do Jonas, criador do Manual do Eletricista.
-Jonas e eletricista industrial e encarregado de obras desde 1997, com especializacao em automacao de armazenagem de graos.
-Ele vende ebooks tecnicos no Hotmart: Vol. 1 (go.hotmart.com/E104935068T) e Vol. 2 (go.hotmart.com/A105044012Q).
-Tom: direto, linguagem de obra, sem academicismo, sem cliches motivacionais.
-Nunca inventar dados tecnicos. Basear-se no material fornecido.`;
+    // System prompt dinamico: se usuario tem instrucoes proprias, usar perfil generico
+    const systemPrompt = userAiInstructions
+      ? `Voce e um assistente especializado em criacao de conteudo para ${userName} na area de ${userNiche}. Siga rigorosamente as instrucoes personalizadas do usuario. Nunca inventar dados. Basear-se no material fornecido.`
+      : `Voce e o assistente de conteudo do Jonas, criador do Manual do Eletricista. Jonas e eletricista industrial e encarregado de obras desde 1997, com especializacao em automacao de armazenagem de graos. Ele vende ebooks tecnicos no Hotmart: Vol. 1 (go.hotmart.com/E104935068T) e Vol. 2 (go.hotmart.com/A105044012Q). Tom: direto, linguagem de obra, sem academicismo, sem cliches motivacionais. Nunca inventar dados tecnicos. Basear-se no material fornecido.`;
 
     const userPrompt = `${template}
 
 TEMA: ${topic}
-${product ? `PRODUTO/LINK A MENCIONAR: ${product} — coloque o link APENAS no campo "cta" do JSON, NAO no corpo do post` : ''}
+${product ? `PRODUTO/LINK A MENCIONAR: ${product} - coloque o link APENAS no campo "cta" do JSON, NAO no corpo do post` : ''}
 ${tone ? `TOM ADICIONAL: ${tone}` : ''}
 
 ${userAiInstructions ? `INSTRUCOES PERSONALIZADAS DO USUARIO (prioridade maxima, siga rigorosamente):\n---\n${userAiInstructions}\n---\n` : ''}
@@ -325,22 +328,25 @@ export async function generateWeeklyPosts(req: AuthRequest, res: Response) {
     const { topic, platform = 'linkedin', tone = 'mix' } = req.body;
     if (!topic) return res.status(400).json({ error: 'Tema obrigatorio' });
 
-    // Buscar instrucoes da IA nas settings do usuario
+    // Buscar dados do usuario e instrucoes personalizadas
     let userAiInstructions = '';
+    let userName = 'Jonas';
+    let userNiche = 'eletricidade industrial';
     try {
-      const userRecord = await prisma.user.findUnique({ where: { id: req.userId! }, select: { settings: true } });
+      const userRecord = await prisma.user.findUnique({ where: { id: req.userId! }, select: { name: true, settings: true } });
+      userName = userRecord?.name?.split(' ')[0] || 'Jonas';
       const settings = (userRecord?.settings as any) || {};
-      if (settings.aiInstructions) userAiInstructions = settings.aiInstructions;
+      userAiInstructions = settings.generatorInstructions || settings.aiInstructions || '';
+      userNiche = settings.niche || 'eletricidade industrial';
     } catch {}
 
     const kbContext = await searchKnowledgeForTopic(req.userId!, topic);
     const template = TEMPLATES[platform as 'linkedin' | 'facebook'] || TEMPLATES.linkedin;
     const hashtags = getHashtags(topic, platform);
 
-    const systemPrompt = `Voce e o assistente de conteudo do Jonas, criador do Manual do Eletricista.
-Jonas e eletricista industrial e encarregado de obras desde 1997, com especializacao em automacao de armazenagem de graos.
-Ele vende ebooks no Hotmart: Vol.1 (go.hotmart.com/E104935068T) e Vol.2 (go.hotmart.com/A105044012Q).
-Tom: direto, linguagem de obra, sem academicismo, sem cliches motivacionais. Nunca inventar dados tecnicos.`;
+    const systemPrompt = userAiInstructions
+      ? `Voce e um assistente especializado em criacao de conteudo para ${userName} na area de ${userNiche}. Siga rigorosamente as instrucoes personalizadas do usuario. Nunca inventar dados. Basear-se no material fornecido.`
+      : `Voce e o assistente de conteudo do Jonas, criador do Manual do Eletricista. Jonas e eletricista industrial e encarregado de obras desde 1997, com especializacao em automacao de armazenagem de graos. Ele vende ebooks no Hotmart: Vol.1 (go.hotmart.com/E104935068T) e Vol.2 (go.hotmart.com/A105044012Q). Tom: direto, linguagem de obra, sem academicismo, sem cliches motivacionais. Nunca inventar dados tecnicos.`;
 
     const userPrompt = `${template}
 
