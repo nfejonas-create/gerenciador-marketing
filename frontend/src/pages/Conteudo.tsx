@@ -17,6 +17,40 @@ const TONES = [
 interface Product { id: string; name: string; url?: string; type?: string; price?: number; }
 interface SavedPost { id: string; platform: string; status: string; content: string; cta?: string; hashtags?: string; scheduledAt?: string; imageUrl?: string; }
 
+
+// PublishModal externo — tipo estavel, sem closure do Conteudo
+function PublishModal({ postId, publishing, onPublish, onClose }: { postId: string; publishing: string | null; onPublish: (id: string, scheduledAt?: string) => void; onClose: () => void; }) {
+  const [localDate, setLocalDate] = useState("");
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+      <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-md space-y-5">
+        <div className="flex items-center justify-between">
+          <h3 className="text-white font-semibold text-lg">Post salvo! O que fazer agora?</h3>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-300"><X size={18} /></button>
+        </div>
+        <button onClick={() => onPublish(postId)} disabled={publishing === postId}
+          className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white py-3 rounded-xl font-medium transition-colors">
+          <Send size={16} /> {publishing === postId ? "Publicando..." : "Publicar agora"}
+        </button>
+        <div className="border-t border-gray-800 pt-4 space-y-3">
+          <p className="text-sm text-gray-400 flex items-center gap-2"><Calendar size={14} /> Ou agendar para:</p>
+          <p className="text-xs text-yellow-500">Horario de Brasilia (UTC-3)</p>
+          <input type="datetime-local" value={localDate} onChange={e => setLocalDate(e.target.value)}
+            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" />
+          <button onClick={() => { if (localDate) onPublish(postId, localDate); }}
+            disabled={!localDate || publishing === postId}
+            className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white py-2 rounded-xl text-sm transition-colors">
+            <Calendar size={14} /> Agendar publicacao
+          </button>
+        </div>
+        <button onClick={onClose} className="w-full text-gray-500 hover:text-gray-300 text-sm py-2 transition-colors">
+          Deixar como rascunho por enquanto
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function Conteudo() {
   const [tab, setTab] = useState<'generate' | 'upload' | 'analyze' | 'posts'>('generate');
 
@@ -385,48 +419,13 @@ export default function Conteudo() {
     }
   }
 
-  // ─── MODALS ─────────────────────────────────────────────────────────────────
-
-  function PublishModal({ postId, onClose }: { postId: string; onClose: () => void }) {
-    const [localDate, setLocalDate] = useState('');
-    return (
-      <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-        <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-md space-y-5">
-          <div className="flex items-center justify-between">
-            <h3 className="text-white font-semibold text-lg">Post salvo! O que fazer agora?</h3>
-            <button onClick={onClose} className="text-gray-500 hover:text-gray-300"><X size={18} /></button>
-          </div>
-          <button
-            onClick={() => publishPost(postId)}
-            disabled={publishing === postId}
-            className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white py-3 rounded-xl font-medium transition-colors">
-            <Send size={16} /> {publishing === postId ? 'Publicando...' : 'Publicar agora'}
-          </button>
-          <div className="border-t border-gray-800 pt-4 space-y-3">
-            <p className="text-sm text-gray-400 flex items-center gap-2"><Calendar size={14} /> Ou agendar para:</p>
-            <input type="datetime-local" value={localDate} onChange={e => setLocalDate(e.target.value)}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" />
-            <button onClick={() => localDate && publishPost(postId, localDate)}
-              disabled={!localDate || publishing === postId}
-              className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white py-2 rounded-xl text-sm transition-colors">
-              <Calendar size={14} /> Agendar publicacao
-            </button>
-          </div>
-          <button onClick={onClose} className="w-full text-gray-500 hover:text-gray-300 text-sm py-2 transition-colors">
-            Deixar como rascunho por enquanto
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   // ─── RENDER ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="space-y-6">
       {/* Modal publicar apos salvar */}
       {showPublishModal && savedPostId && (
-        <PublishModal postId={savedPostId} onClose={() => { setShowPublishModal(false); setSavedPostId(null); }} />
+        <PublishModal postId={savedPostId} publishing={publishing} onPublish={publishPost} onClose={() => { setShowPublishModal(false); setSavedPostId(null); }} />
       )}
 
       {/* Modal publicar do historico */}
