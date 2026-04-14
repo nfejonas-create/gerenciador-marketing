@@ -70,23 +70,70 @@ function getHashtags(topic: string, platform: string): string[] {
 }
 
 const TEMPLATES = {
-  linkedin: `FORMATO OBRIGATORIO - LinkedIn (Manual do Eletricista):
-LINHA 1 (gancho): Frase de 1 linha que provoca, contraria ou afirma algo que todo eletricista ja viveu. NUNCA comece com "Voce sabia".
-[linha em branco]
-PARAGRAFO (contexto, 3-4 linhas): Situacao real de obra ou campo. Tom de conversa entre profissionais.
-[linha em branco]
-PARAGRAFO (virada, 2-3 linhas): O erro comum ou detalhe que faz diferenca na pratica.
-[linha em branco]
-PARAGRAFO (solucao, 2-3 linhas): O que fazer diferente. Baseado em experiencia de campo.
-[linha em branco]
-CTA (1 linha): Mencionar o Manual do Eletricista naturalmente.
-LIMITE: 1300 caracteres.`,
+  linkedin: `FORMATO LINKEDIN - Profissional e Autoridade:
+🎯 ESTRUTURA VARIADA (escolha UMA das opcoes abaixo conforme o tema):
 
-  facebook: `FORMATO OBRIGATORIO - Facebook (Manual do Eletricista):
-LINHA 1: Pergunta direta OU afirmacao que gera identificacao. Curta. Impactante.
-CORPO (4-6 linhas): Situacao pratica, dica rapida ou erro comum. Linguagem de obra.
-ENCERRAMENTO: Convite para comentar ou marcar um colega eletricista.
-LIMITE: 500 caracteres.`,
+OPCAO 1 - "A verdade que ninguem conta":
+🔥 Gancho: "[Afirmacao polemica ou contraintuitiva sobre o tema]"
+💡 Desenvolvimento: Contexto + problema real
+⚡ Virada: O insight ou solucao pratica
+✅ Conclusao: Mencione o produto/servico naturalmente
+
+OPCAO 2 - "Erro que custa caro":
+❌ Gancho: "[Erro comum que todo mundo comete]"
+📊 Impacto: Quanto isso custa ou prejudica
+🎯 Solucao: Como fazer certo passo a passo
+💼 CTA: Como voce pode ajudar
+
+OPCAO 3 - "O que aprendi na pratica":
+💭 Gancho: "[Licao aprendida com experiencia real]"
+📖 Contexto: Breve historia ou situacao
+🔑 Aprendizado: O insight principal
+🚀 Aplicacao: Como usar isso hoje
+
+OPCAO 4 - "Comparativo direto":
+⚖️ Gancho: "[Antes vs Depois] ou [Certo vs Errado]"
+📋 Lado A: Como a maioria faz (errado)
+✅ Lado B: Como deveria ser (certo)
+🎯 Dica bonus: Um detalhe extra
+
+REGRAS LINKEDIN:
+- Use 2-3 emojis relevantes no texto (nao exagere)
+- Paragrafos curtos (max 3 linhas cada)
+- Linguagem profissional mas conversacional
+- Limite: 1300 caracteres
+- CTA sutil no final`,
+
+  facebook: `FORMATO FACEBOOK - Engajamento e Conversa:
+🎯 ESTRUTURA VARIADA (escolha UMA das opcoes abaixo):
+
+OPCAO 1 - "Pergunta que gera discussao":
+❓ [Pergunta direta relacionada ao tema]
+📝 [Contexto curto em 2-3 linhas]
+👇 "Comenta aqui sua experiencia!"
+
+OPCAO 2 - "Dica rapida de hoje":
+💡 "[Dica pratica em uma frase]"
+📌 [Explicacao rapida em 3-4 linhas]
+❤️ "Curta se voce ja sabia disso!"
+
+OPCAO 3 - "Marcar o amigo":
+😂 "[Situacao engracada ou identificavel]"
+👥 [Contexto em 2-3 linhas]
+🏷️ "Marca aquele colega que precisa ver isso!"
+
+OPCAO 4 - "Votação simples":
+🤔 "[Pergunta com duas opcoes]"
+A) [Opcao 1]
+B) [Opcao 2]
+👇 "Comenta A ou B!"
+
+REGRAS FACEBOOK:
+- Use 1-2 emojis por paragrafo
+- Texto curto e direto (max 500 caracteres)
+- Linguagem mais casual e proxima
+- Perguntas que geram comentarios
+- CTA clara para engajamento`,
 };
 
 export async function generatePost(req: AuthRequest, res: Response) {
@@ -124,29 +171,41 @@ export async function generatePost(req: AuthRequest, res: Response) {
       ? `Voce e um assistente especializado em criacao de conteudo para ${userName} na area de ${userNiche}. Siga rigorosamente as instrucoes personalizadas do usuario. Nunca inventar dados. Basear-se no material fornecido.`
       : `Voce e o assistente de conteudo do Jonas, criador do Manual do Eletricista. Jonas e eletricista industrial e encarregado de obras desde 1997, com especializacao em automacao de armazenagem de graos. Ele vende ebooks tecnicos no Hotmart: Vol. 1 (go.hotmart.com/E104935068T) e Vol. 2 (go.hotmart.com/A105044012Q). Tom: direto, linguagem de obra, sem academicismo, sem cliches motivacionais. Nunca inventar dados tecnicos. Basear-se no material fornecido.`;
 
-    const userPrompt = `${template}
+    const userPrompt = `🎨 CRIE UM POST UNICO E CRIATIVO SOBRE O TEMA ABAIXO
 
 TEMA: ${topic}
+PLATAFORMA: ${platform || 'linkedin'}
 ${product ? `PRODUTO/LINK A MENCIONAR: ${product} - coloque o link APENAS no campo "cta" do JSON, NAO no corpo do post` : ''}
 ${tone ? `TOM ADICIONAL: ${tone}` : ''}
 
-${userAiInstructions ? `INSTRUCOES PERSONALIZADAS DO USUARIO (prioridade maxima, siga rigorosamente):\n---\n${userAiInstructions}\n---\n` : ''}
+${userAiInstructions ? `📋 INSTRUCOES PERSONALIZADAS DO USUARIO (SIGA RIGOROSAMENTE - PRIORIDADE MAXIMA):
+═══════════════════════════════════════════════════════════════
+${userAiInstructions}
+═══════════════════════════════════════════════════════════════
 
-${kbContext ? `BASE DE CONHECIMENTO (use estas informacoes como fonte):\n---\n${kbContext}\n---\n` : ''}
+` : ''}${template}
 
-REGRAS IMPORTANTES:
-- O corpo do post (campo "content") NAO deve conter o CTA nem o link
-- O CTA vai APENAS no campo "cta" do JSON, no formato: texto de chamada + link
-- As hashtags vao APENAS no campo "hashtags", NAO no corpo do post
-- O corpo deve terminar naturalmente, sem repetir CTA
-- GERE HASHTAGS CONTEXTUAIS baseadas no tema acima, relevantes para o nicho do usuario
+${kbContext ? `📚 BASE DE CONHECIMENTO (use como fonte):
+---
+${kbContext}
+---
 
-HASHTAGS SUGERIDAS (use como base ou substitua por melhores): ${hashtags.join(' ')}
+` : ''}⚠️ REGRAS OBRIGATORIAS:
+1. ESCOLHA APENAS UMA das opcoes de estrutura acima (nao misture)
+2. Use emojis relevantes (2-3 para LinkedIn, 1-2 para Facebook)
+3. O corpo do post (campo "content") NAO deve conter o CTA nem hashtags
+4. O CTA vai APENAS no campo "cta" do JSON
+5. As hashtags vao APENAS no campo "hashtags"
+6. Varie o formato a cada post - nao fique repetindo a mesma estrutura
+7. Seja criativo e evite clichês como "Voce sabia que..."
+8. GERE HASHTAGS CONTEXTUAIS baseadas no tema, relevantes para ${userNiche}
+
+HASHTAGS SUGERIDAS (use como inspiracao ou crie melhores): ${hashtags.join(' ')}
 
 Retorne SOMENTE JSON valido:
 {
-  "content": "corpo do post SEM cta e SEM hashtags",
-  "cta": "frase de chamada para acao + link do produto se houver",
+  "content": "corpo do post SEM cta e SEM hashtags - com emojis e formato variado",
+  "cta": "chamada para acao + link do produto se houver",
   "hashtags": "#hashtag1 #hashtag2 #hashtag3 #hashtag4 #hashtag5"
 }`;
 
@@ -361,27 +420,37 @@ export async function generateWeeklyPosts(req: AuthRequest, res: Response) {
       ? `Voce e um assistente especializado em criacao de conteudo para ${userName} na area de ${userNiche}. Siga rigorosamente as instrucoes personalizadas do usuario. Nunca inventar dados. Basear-se no material fornecido.`
       : `Voce e o assistente de conteudo do Jonas, criador do Manual do Eletricista. Jonas e eletricista industrial e encarregado de obras desde 1997, com especializacao em automacao de armazenagem de graos. Ele vende ebooks no Hotmart: Vol.1 (go.hotmart.com/E104935068T) e Vol.2 (go.hotmart.com/A105044012Q). Tom: direto, linguagem de obra, sem academicismo, sem cliches motivacionais. Nunca inventar dados tecnicos.`;
 
-    const userPrompt = `${template}
+    const userPrompt = `🎨 GERE 7 POSTS UNICOS E VARIADOS sobre o tema: "${topic}"
 
-GERE 7 POSTS DIFERENTES sobre o tema: "${topic}"
-Plataforma: ${platform}
-${userAiInstructions ? `INSTRUCOES PERSONALIZADAS DO USUARIO (prioridade maxima):\n---\n${userAiInstructions}\n---\n` : ''}
-${kbContext ? `BASE DE CONHECIMENTO:\n---\n${kbContext}\n---\n` : ''}
+PLATAFORMA: ${platform}
+${userAiInstructions ? `📋 INSTRUCOES PERSONALIZADAS DO USUARIO (SIGA RIGOROSAMENTE):
+═══════════════════════════════════════════════════════════════
+${userAiInstructions}
+═══════════════════════════════════════════════════════════════
 
-Angulos obrigatorios (um por post, nessa ordem):
-1. "dor" - problema/frustacao que todo eletricista conhece
-2. "dica" - tecnica pratica do campo, nao do livro
-3. "erro" - engano comum que custa caro ou e perigoso
-4. "conceito" - explicacao tecnica simplificada
-5. "historia" - caso real de obra (sem nome de cliente)
-6. "comparacao" - antes/depois ou certo/errado lado a lado
-7. "cta" - post com chamada clara para o ebook
+` : ''}${template}
 
-REGRAS:
+${kbContext ? `📚 BASE DE CONHECIMENTO:
+---
+${kbContext}
+---
+
+` : ''}🎯 VARIACAO DE FORMATOS (use um diferente para cada dia):
+- Segunda: "A verdade que ninguem conta" (polemico/contraintuitivo)
+- Terca: "Erro que custa caro" (problema + solucao)
+- Quarta: "O que aprendi na pratica" (historia/licao)
+- Quinta: "Comparativo direto" (antes/depois ou certo/errado)
+- Sexta: "Pergunta que gera discussao" (engajamento)
+- Sabado: "Dica rapida de hoje" (valor rapido)
+- Domingo: "Marcar o amigo" (situacao identificavel)
+
+⚠️ REGRAS:
+- Cada post deve ter ESTRUTURA DIFERENTE (nao repita o mesmo formato)
+- Use emojis relevantes (2-3 para LinkedIn, 1-2 para Facebook)
 - "content" = corpo do post SEM cta e SEM hashtags
-- "cta" = chamada para acao (inclua link go.hotmart.com/E104935068T no post 7)
+- "cta" = chamada para acao (inclua link no post 7 se houver produto)
+- GERE HASHTAGS CONTEXTUAIS baseadas no tema de cada post
 - Horarios sugeridos: 8h, 9h, 10h, 12h, 17h, 18h, 19h
-- GERE HASHTAGS CONTEXTUAIS baseadas no tema de cada post, relevantes para o nicho do usuario
 
 Retorne SOMENTE JSON valido:
 {
@@ -389,8 +458,8 @@ Retorne SOMENTE JSON valido:
     {
       "day": "Segunda",
       "suggestedTime": "08:00",
-      "angle": "dor",
-      "content": "corpo do post",
+      "angle": "verdade",
+      "content": "corpo do post com emojis",
       "cta": "chamada",
       "hashtags": "#hashtag1 #hashtag2 #hashtag3 #hashtag4 #hashtag5"
     }
