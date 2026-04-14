@@ -139,14 +139,15 @@ REGRAS IMPORTANTES:
 - O CTA vai APENAS no campo "cta" do JSON, no formato: texto de chamada + link
 - As hashtags vao APENAS no campo "hashtags", NAO no corpo do post
 - O corpo deve terminar naturalmente, sem repetir CTA
+- GERE HASHTAGS CONTEXTUAIS baseadas no tema acima, relevantes para o nicho do usuario
 
-HASHTAGS A USAR: ${hashtags.join(' ')}
+HASHTAGS SUGERIDAS (use como base ou substitua por melhores): ${hashtags.join(' ')}
 
 Retorne SOMENTE JSON valido:
 {
   "content": "corpo do post SEM cta e SEM hashtags",
   "cta": "frase de chamada para acao + link do produto se houver",
-  "hashtags": ${JSON.stringify(hashtags)}
+  "hashtags": "#hashtag1 #hashtag2 #hashtag3 #hashtag4 #hashtag5"
 }`;
 
     const response = await anthropic.messages.create({
@@ -380,6 +381,7 @@ REGRAS:
 - "content" = corpo do post SEM cta e SEM hashtags
 - "cta" = chamada para acao (inclua link go.hotmart.com/E104935068T no post 7)
 - Horarios sugeridos: 8h, 9h, 10h, 12h, 17h, 18h, 19h
+- GERE HASHTAGS CONTEXTUAIS baseadas no tema de cada post, relevantes para o nicho do usuario
 
 Retorne SOMENTE JSON valido:
 {
@@ -390,7 +392,7 @@ Retorne SOMENTE JSON valido:
       "angle": "dor",
       "content": "corpo do post",
       "cta": "chamada",
-      "hashtags": ${JSON.stringify(hashtags)}
+      "hashtags": "#hashtag1 #hashtag2 #hashtag3 #hashtag4 #hashtag5"
     }
   ]
 }`;
