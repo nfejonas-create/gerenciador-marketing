@@ -742,19 +742,34 @@ export default function Conteudo() {
                       <Save size={14} /> Salvar rascunho
                     </button>
                   </div>
-                  <div className="bg-gray-800 rounded-lg p-4 max-h-64 overflow-y-auto">
-                    <p className="text-gray-200 whitespace-pre-wrap text-sm">{generated.content}</p>
-                  </div>
-                  {generated.cta && (
-                    <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-3">
-                      <p className="text-blue-300 text-sm font-medium">CTA: {generated.cta}</p>
-                    </div>
-                  )}
-                  {generated.hashtags && (
-                    <div className="flex flex-wrap gap-2">
-                      {generated.hashtags.map((h: string, i: number) => (
-                        <span key={i} className="bg-gray-800 text-blue-400 text-xs px-2 py-1 rounded">{h}</span>
-                      ))}
+                  {generated.content ? (
+                    <>
+                      <div className="bg-gray-800 rounded-lg p-4 max-h-64 overflow-y-auto">
+                        <p className="text-gray-200 whitespace-pre-wrap text-sm">{generated.content}</p>
+                      </div>
+                      {generated.cta && (
+                        <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-3">
+                          <p className="text-blue-300 text-sm font-medium">CTA: {generated.cta}</p>
+                        </div>
+                      )}
+                      {generated.hashtags && (
+                        <div className="flex flex-wrap gap-2">
+                          {typeof generated.hashtags === 'string' ? (
+                            generated.hashtags.split(' ').filter((h: string) => h.startsWith('#')).map((h: string, i: number) => (
+                              <span key={i} className="bg-gray-800 text-blue-400 text-xs px-2 py-1 rounded">{h}</span>
+                            ))
+                          ) : (
+                            generated.hashtags.map((h: string, i: number) => (
+                              <span key={i} className="bg-gray-800 text-blue-400 text-xs px-2 py-1 rounded">{h}</span>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="bg-red-900/30 border border-red-700 rounded-lg p-4">
+                      <p className="text-red-300 text-sm">⚠️ Erro na estrutura do post gerado. Tente novamente.</p>
+                      <p className="text-gray-500 text-xs mt-2">Resposta: {JSON.stringify(generated)}</p>
                     </div>
                   )}
                   <div className="border-t border-gray-800 pt-4">
