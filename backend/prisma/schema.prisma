@@ -29,6 +29,7 @@ model User {
   socialAccounts SocialAccount[]
   metrics        Metric[]
   posts          Post[]
+  carousels      Carousel[]
   products       Product[]
   calendar       ContentCalendar[]
   knowledgeBase  KnowledgeBase[]
@@ -42,6 +43,21 @@ model AdminSession {
   endedAt      DateTime?
   @@index([adminId])
   @@index([targetUserId])
+}
+
+model Carousel {
+  id          String          @id @default(cuid())
+  userId      String
+  title       String
+  platform    String          @default("linkedin")
+  slides      Json            // array de slides
+  status      String          @default("draft") // draft | scheduled | published
+  scheduledAt DateTime?
+  publishedAt DateTime?
+  linkedinUrn String?         // URN retornado após publicar
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model SocialAccount {
