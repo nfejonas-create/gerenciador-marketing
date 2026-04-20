@@ -137,6 +137,7 @@ export async function createLinkedInPost(
   console.log('[LinkedIn] Criando post via Posts API...');
   console.log('[LinkedIn] Author:', author);
   console.log('[LinkedIn] Document:', documentUrn);
+  console.log('[LinkedIn] Commentary:', commentary.substring(0, 50) + '...');
 
   const baseHeaders = {
     Authorization: `Bearer ${account.accessToken}`,
@@ -145,35 +146,46 @@ export async function createLinkedInPost(
     'Content-Type': 'application/json',
   };
 
-  const postRes = await axios.post(
-    'https://api.linkedin.com/rest/posts',
-    {
-      author,
-      commentary,
-      visibility: 'PUBLIC',
-      distribution: {
-        feedDistribution: 'MAIN_FEED',
-        targetEntities: [],
-        thirdPartyDistributionChannels: [],
-      },
-      content: {
-        media: {
-          title,
-          id: documentUrn,
+  console.log('[LinkedIn] Headers:', JSON.stringify(baseHeaders, null, 2));
+
+  try {
+    const postRes = await axios.post(
+      'https://api.linkedin.com/rest/posts',
+      {
+        author,
+        commentary,
+        visibility: 'PUBLIC',
+        distribution: {
+          feedDistribution: 'MAIN_FEED',
+          targetEntities: [],
+          thirdPartyDistributionChannels: [],
         },
+        content: {
+          media: {
+            title,
+            id: documentUrn,
+          },
+        },
+        lifecycleState: 'PUBLISHED',
+        isReshareDisabledByAuthor: false,
       },
-      lifecycleState: 'PUBLISHED',
-      isReshareDisabledByAuthor: false,
-    },
-    { headers: baseHeaders }
-  );
+      { headers: baseHeaders }
+    );
 
-  const postId = postRes.headers['x-restli-id'] || postRes.headers['x-linkedin-id'] || '';
-  console.log('[LinkedIn] Post criado! ID:', postId);
-  console.log('[LinkedIn] Response status:', postRes.status);
-  console.log('[LinkedIn] Verificar em: https://www.linkedin.com/feed/update/' + postId + '/');
+    console.log('[LinkedIn] Post response status:', postRes.status);
+    console.log('[LinkedIn] Post response headers:', JSON.stringify(postRes.headers, null, 2));
+    console.log('[LinkedIn] Post response data:', JSON.stringify(postRes.data, null, 2));
 
-  return postId;
+    const postId = postRes.headers['x-restli-id'] || postRes.headers['x-linkedin-id'] || '';
+    console.log('[LinkedIn] Post ID extraído:', postId);
+
+    return postId;
+  } catch (err: any) {
+    console.error('[LinkedIn] ERRO ao criar post:', err.response?.status, err.response?.statusText);
+    console.error('[LinkedIn] ERRO data:', JSON.stringify(err.response?.data, null, 2));
+    console.error('[LinkedIn] ERRO headers:', JSON.stringify(err.response?.headers, null, 2));
+    throw err;
+  }
 }
 
 // Fluxo completo: publicar carrossel
