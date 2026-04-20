@@ -32,6 +32,18 @@ app.use('/knowledge', knowledgeRoutes);
 
 app.get('/health', (_req, res) => res.json({ status: 'ok', serverTime: new Date().toISOString() }));
 
+// Endpoint temporário de setup - promove usuário a admin pelo email
+app.post('/setup/make-admin', async (req: any, res: any) => {
+  const { email, secret } = req.body;
+  if (secret !== (process.env.SETUP_SECRET || 'setup-secret-2026')) return res.status(403).json({ error: 'Acesso negado' });
+  const { PrismaClient } = require('@prisma/client');
+  const p = new PrismaClient();
+  try {
+    const user = await p.user.update({ where: { email }, data: { role: 'ADMIN' }, select: { id: true, email: true, role: true } });
+    return res.json({ ok: true, user });
+  } catch (e: any) { return res.status(400).json({ error: e.message }); } finally { await p.$disconnect(); }
+});
+
 app.use(errorHandler);
 
 app.listen(PORT, () => console.log(`Backend rodando na porta ${PORT}`));
