@@ -9,9 +9,9 @@ export async function connectLinkedIn(req: AuthRequest, res: Response) {
   try {
     const { accessToken, pageId, pageName } = req.body;
     const account = await prisma.socialAccount.upsert({
-      where: { userId_platform: { userId: req.userId!, platform: 'linkedin' } },
+      where: { userId_platform: { userId: req.effectiveUserId!, platform: 'linkedin' } },
       update: { accessToken, pageId, pageName },
-      create: { userId: req.userId!, platform: 'linkedin', accessToken, pageId, pageName },
+      create: { userId: req.effectiveUserId!, platform: 'linkedin', accessToken, pageId, pageName },
     });
     return res.json(account);
   } catch {
@@ -47,9 +47,9 @@ export async function connectFacebook(req: AuthRequest, res: Response) {
     }
 
     const account = await prisma.socialAccount.upsert({
-      where: { userId_platform: { userId: req.userId!, platform: 'facebook' } },
+      where: { userId_platform: { userId: req.effectiveUserId!, platform: 'facebook' } },
       update: { accessToken: longLivedToken, pageId, pageName },
-      create: { userId: req.userId!, platform: 'facebook', accessToken: longLivedToken, pageId, pageName },
+      create: { userId: req.effectiveUserId!, platform: 'facebook', accessToken: longLivedToken, pageId, pageName },
     });
     return res.json({ ...account, tokenUpgraded: longLivedToken !== accessToken });
   } catch {
@@ -58,7 +58,7 @@ export async function connectFacebook(req: AuthRequest, res: Response) {
 }
 
 export async function getSocialAccounts(req: AuthRequest, res: Response) {
-  const accounts = await prisma.socialAccount.findMany({ where: { userId: req.userId! } });
+  const accounts = await prisma.socialAccount.findMany({ where: { userId: req.effectiveUserId! } });
   return res.json(accounts.map(a => ({
     platform: a.platform,
     pageId: a.pageId,
@@ -74,7 +74,7 @@ export async function getSocialAccounts(req: AuthRequest, res: Response) {
 
 export async function syncMetrics(req: AuthRequest, res: Response) {
   try {
-    const accounts = await prisma.socialAccount.findMany({ where: { userId: req.userId! } });
+    const accounts = await prisma.socialAccount.findMany({ where: { userId: req.effectiveUserId! } });
     const results = [];
 
     for (const account of accounts) {
@@ -99,7 +99,7 @@ export async function syncMetrics(req: AuthRequest, res: Response) {
           const followers = pageResp.data.followers_count || pageResp.data.fan_count || 0;
 
           await prisma.metric.create({
-            data: { userId: req.userId!, platform: 'facebook', date: new Date(), views, likes: engaged, followers },
+            data: { userId: req.effectiveUserId!, platform: 'facebook', date: new Date(), views, likes: engaged, followers },
           });
           results.push({ platform: 'facebook', status: 'ok', views, engaged, followers });
         } catch (err: any) {
@@ -112,7 +112,7 @@ export async function syncMetrics(req: AuthRequest, res: Response) {
           // LinkedIn bloqueia metricas para perfis pessoais via API
           // Usamos dados reais dos posts publicados pelo nosso app
           const publishedPosts = await prisma.post.findMany({
-            where: { userId: req.userId!, platform: 'linkedin', status: 'published' },
+            where: { userId: req.effectiveUserId!, platform: 'linkedin', status: 'published' },
             orderBy: { publishedAt: 'desc' },
             take: 30,
           });
@@ -121,7 +121,7 @@ export async function syncMetrics(req: AuthRequest, res: Response) {
 
           await prisma.metric.create({
             data: {
-              userId: req.userId!,
+              userId: req.effectiveUserId!,
               platform: 'linkedin',
               date: new Date(),
               views: 0,

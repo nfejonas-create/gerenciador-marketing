@@ -138,12 +138,12 @@ export async function publishPost(req: AuthRequest, res: Response) {
     const { postId } = req.body;
 
     const post = await prisma.post.findFirst({
-      where: { id: postId, userId: req.userId! },
+      where: { id: postId, userId: req.effectiveUserId! },
     });
     if (!post) return res.status(404).json({ error: 'Post nao encontrado' });
 
     const account = await prisma.socialAccount.findFirst({
-      where: { userId: req.userId!, platform: post.platform },
+      where: { userId: req.effectiveUserId!, platform: post.platform },
     });
     if (!account) {
       return res.status(400).json({

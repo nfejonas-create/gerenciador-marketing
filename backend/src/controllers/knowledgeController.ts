@@ -61,7 +61,7 @@ async function extractFromFile(buffer: Buffer, mimetype: string): Promise<string
 
 export async function listKnowledge(req: AuthRequest, res: Response) {
   const { tag, type } = req.query;
-  const where: Record<string, unknown> = { userId: req.userId!, active: true };
+  const where: Record<string, unknown> = { userId: req.effectiveUserId!, active: true };
   if (type) where.type = type;
   if (tag) where.tags = { contains: tag as string };
 
@@ -90,7 +90,7 @@ export async function uploadToKnowledge(req: AuthRequest, res: Response) {
 
     const item = await prisma.knowledgeBase.create({
       data: {
-        userId: req.userId!,
+        userId: req.effectiveUserId!,
         title: title || originalname,
         type,
         content: extractedContent,
@@ -114,7 +114,7 @@ export async function addLinkToKnowledge(req: AuthRequest, res: Response) {
 
     const item = await prisma.knowledgeBase.create({
       data: {
-        userId: req.userId!,
+        userId: req.effectiveUserId!,
         title: title || url,
         type: 'link',
         content: description || `Link: ${url}`,
@@ -158,7 +158,7 @@ export async function searchKnowledgeForTopic(userId: string, topic: string): Pr
 export async function deleteKnowledge(req: AuthRequest, res: Response) {
   const { id } = req.params;
   await prisma.knowledgeBase.updateMany({
-    where: { id, userId: req.userId! },
+    where: { id, userId: req.effectiveUserId! },
     data: { active: false },
   });
   return res.json({ ok: true });
@@ -166,7 +166,7 @@ export async function deleteKnowledge(req: AuthRequest, res: Response) {
 
 export async function getKnowledgeItem(req: AuthRequest, res: Response) {
   const { id } = req.params;
-  const item = await prisma.knowledgeBase.findFirst({ where: { id, userId: req.userId! } });
+  const item = await prisma.knowledgeBase.findFirst({ where: { id, userId: req.effectiveUserId! } });
   if (!item) return res.status(404).json({ error: 'Nao encontrado' });
   return res.json(item);
 }

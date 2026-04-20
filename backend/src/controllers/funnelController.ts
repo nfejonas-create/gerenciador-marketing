@@ -7,14 +7,14 @@ const prisma = new PrismaClient();
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export async function getProducts(req: AuthRequest, res: Response) {
-  const products = await prisma.product.findMany({ where: { userId: req.userId! } });
+  const products = await prisma.product.findMany({ where: { userId: req.effectiveUserId! } });
   return res.json(products);
 }
 
 export async function createProduct(req: AuthRequest, res: Response) {
   try {
     const { name, type, url, price } = req.body;
-    const product = await prisma.product.create({ data: { userId: req.userId!, name, type, url, price } });
+    const product = await prisma.product.create({ data: { userId: req.effectiveUserId!, name, type, url, price } });
     return res.json(product);
   } catch {
     return res.status(500).json({ error: 'Erro ao criar produto' });
@@ -32,8 +32,8 @@ export async function deleteProduct(req: AuthRequest, res: Response) {
 
 export async function getFunnelSuggestions(req: AuthRequest, res: Response) {
   try {
-    const products = await prisma.product.findMany({ where: { userId: req.userId! } });
-    const metrics = await prisma.metric.findMany({ where: { userId: req.userId! }, orderBy: { date: 'desc' }, take: 10 });
+    const products = await prisma.product.findMany({ where: { userId: req.effectiveUserId! } });
+    const metrics = await prisma.metric.findMany({ where: { userId: req.effectiveUserId! }, orderBy: { date: 'desc' }, take: 10 });
     if (products.length === 0) return res.json({ suggestions: [] });
     const prompt = `Com base nas metricas de engajamento: ${JSON.stringify(metrics)}
 e nos produtos: ${JSON.stringify(products)},

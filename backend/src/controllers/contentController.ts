@@ -145,7 +145,7 @@ export async function generatePost(req: AuthRequest, res: Response) {
     let userName = 'Jonas';
     let userNiche = 'eletricidade industrial';
     try {
-      const userRecord = await prisma.user.findUnique({ where: { id: req.userId! }, select: { name: true, settings: true } });
+      const userRecord = await prisma.user.findUnique({ where: { id: req.effectiveUserId! }, select: { name: true, settings: true } });
       userName = userRecord?.name?.split(' ')[0] || 'Jonas';
       const settings = (userRecord?.settings as any) || {};
       userAiInstructions = settings.generatorInstructions || settings.aiInstructions || '';
@@ -155,12 +155,12 @@ export async function generatePost(req: AuthRequest, res: Response) {
     let kbContext = '';
     if (kbIds && Array.isArray(kbIds) && kbIds.length > 0) {
       const items = await prisma.knowledgeBase.findMany({
-        where: { id: { in: kbIds }, userId: req.userId! },
+        where: { id: { in: kbIds }, userId: req.effectiveUserId! },
         select: { title: true, content: true },
       });
       kbContext = items.map(i => `[${i.title}]\n${i.content.substring(0, 2000)}`).join('\n\n---\n\n');
     } else {
-      kbContext = await searchKnowledgeForTopic(req.userId!, topic);
+      kbContext = await searchKnowledgeForTopic(req.effectiveUserId!, topic);
     }
 
     const hashtags = getHashtags(topic, platform || 'linkedin');
@@ -262,7 +262,7 @@ export async function generateCalendar(req: AuthRequest, res: Response) {
     const { weeks = 4, platforms = ['linkedin', 'facebook'] } = req.body;
 
     const kbItems = await prisma.knowledgeBase.findMany({
-      where: { userId: req.userId!, active: true },
+      where: { userId: req.effectiveUserId!, active: true },
       select: { title: true, tags: true },
       take: 20,
     });
@@ -319,7 +319,7 @@ Retorne JSON:
 
 export async function getPosts(req: AuthRequest, res: Response) {
   const posts = await prisma.post.findMany({
-    where: { userId: req.userId! },
+    where: { userId: req.effectiveUserId! },
     orderBy: { createdAt: 'desc' },
   });
   return res.json(posts);
@@ -330,7 +330,7 @@ export async function savePost(req: AuthRequest, res: Response) {
     const { platform, content, cta, hashtags, scheduledAt, status, imageUrl } = req.body;
     const post = await prisma.post.create({
       data: {
-        userId: req.userId!,
+        userId: req.effectiveUserId!,
         platform,
         content,
         cta,
@@ -351,7 +351,7 @@ export async function updatePost(req: AuthRequest, res: Response) {
     const { id } = req.params;
     const { status, scheduledAt, imageUrl } = req.body;
     const post = await prisma.post.updateMany({
-      where: { id, userId: req.userId! },
+      where: { id, userId: req.effectiveUserId! },
       data: {
         ...(status && { status }),
         ...(scheduledAt && { scheduledAt: new Date(scheduledAt) }),
@@ -368,7 +368,7 @@ export async function deletePost(req: AuthRequest, res: Response) {
   try {
     const { id } = req.params;
     await prisma.post.deleteMany({
-      where: { id, userId: req.userId! },
+      where: { id, userId: req.effectiveUserId! },
     });
     return res.json({ success: true, message: 'Post excluido com sucesso' });
   } catch {
@@ -384,7 +384,7 @@ export async function scheduleBatch(req: AuthRequest, res: Response) {
     const updates = await Promise.all(
       items.map(({ postId, scheduledAt }) =>
         prisma.post.updateMany({
-          where: { id: postId, userId: req.userId! },
+          where: { id: postId, userId: req.effectiveUserId! },
           data: { status: 'scheduled', scheduledAt: new Date(scheduledAt) },
         })
       )
@@ -405,14 +405,14 @@ export async function generateWeeklyPosts(req: AuthRequest, res: Response) {
     let userName = 'Jonas';
     let userNiche = 'eletricidade industrial';
     try {
-      const userRecord = await prisma.user.findUnique({ where: { id: req.userId! }, select: { name: true, settings: true } });
+      const userRecord = await prisma.user.findUnique({ where: { id: req.effectiveUserId! }, select: { name: true, settings: true } });
       userName = userRecord?.name?.split(' ')[0] || 'Jonas';
       const settings = (userRecord?.settings as any) || {};
       userAiInstructions = settings.generatorInstructions || settings.aiInstructions || '';
       userNiche = settings.niche || 'eletricidade industrial';
     } catch {}
 
-    const kbContext = await searchKnowledgeForTopic(req.userId!, topic);
+    const kbContext = await searchKnowledgeForTopic(req.effectiveUserId!, topic);
     const template = TEMPLATES[platform as 'linkedin' | 'facebook'] || TEMPLATES.linkedin;
     const hashtags = getHashtags(topic, platform);
 
