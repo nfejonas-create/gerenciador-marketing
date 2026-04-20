@@ -8,6 +8,23 @@ interface LinkedInAccount {
 
 const LINKEDIN_VERSION = '202504';
 
+// Buscar person ID pelo token
+export async function getLinkedInPersonId(accessToken: string): Promise<string> {
+  console.log('[LinkedIn] Buscando person ID pelo token...');
+  
+  const res = await axios.get('https://api.linkedin.com/v2/userinfo', {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+  
+  // O sub contém o person ID
+  const personId = res.data.sub;
+  console.log('[LinkedIn] Person ID encontrado:', personId);
+  
+  return personId;
+}
+
 // Etapa 1: Registrar upload do documento via Documents API
 export async function registerDocumentUpload(
   account: LinkedInAccount

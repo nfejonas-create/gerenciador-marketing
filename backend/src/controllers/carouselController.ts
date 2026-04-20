@@ -3,7 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import Anthropic from '@anthropic-ai/sdk';
 import { AuthRequest } from '../middleware/authGuard';
 import { generateCarouselPDF } from '../services/carouselPdf';
-import { publishCarouselToLinkedIn } from '../services/linkedinPublish';
+import { publishCarouselToLinkedIn, getLinkedInPersonId } from '../services/linkedinPublish';
 
 const prisma = new PrismaClient();
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -196,11 +196,22 @@ export async function publishCarousel(req: AuthRequest, res: Response) {
       return res.status(400).json({ error: 'Conta LinkedIn não conectada' });
     }
 
-    // Buscar usuário para obter linkedinId
+    // Buscar usuário para obter linkedinId ou buscar pelo token
     const user = await prisma.user.findUnique({
       where: { id: req.effectiveUserId! },
       select: { linkedinId: true },
     });
+
+    // Se não tiver linkedinId salvo, buscar pelo token
+    let personId = user?.linkedinId;
+    if (!personId) {
+      try {
+        personId = await getLinkedInPersonId(linkedInAccount.accessToken);
+        console.log('[publishCarousel] Person ID obtido do token:', personId);
+      } catch (err) {
+        console.error('[publishCarousel] Erro ao obter person ID:', err);
+      }
+    }
 
     // Gerar PDF do carrossel
     const pdfBuffer = await generateCarouselPDF(carousel.slides as any[]);
@@ -212,7 +223,7 @@ export async function publishCarousel(req: AuthRequest, res: Response) {
     const { postUrn, documentUrn } = await publishCarouselToLinkedIn(
       { 
         accessToken: linkedInAccount.accessToken, 
-        personId: user?.linkedinId || linkedInAccount.pageId || undefined,
+        personId: personId || undefined,
         pageId: linkedInAccount.pageId || undefined 
       },
       pdfBuffer,
