@@ -49,7 +49,10 @@ export default function Carrossel() {
   };
 
   const handleGenerate = async () => {
-    if (!topic.trim()) return;
+    if (!topic.trim()) {
+      alert('Por favor, digite um tema para o carrossel');
+      return;
+    }
     setGenerating(true);
     try {
       const { data } = await api.post('/content/generate-carousel', {
