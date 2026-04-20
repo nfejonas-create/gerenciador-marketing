@@ -19,30 +19,35 @@ export async function registerDocumentUpload(
   console.log('[LinkedIn] Registrando upload de documento...');
   console.log('[LinkedIn] Owner:', owner);
 
-  const registerRes = await axios.post(
-    'https://api.linkedin.com/rest/documents',
-    {
-      initializeUploadRequest: {
-        owner,
+  try {
+    const registerRes = await axios.post(
+      'https://api.linkedin.com/rest/documents',
+      {
+        initializeUploadRequest: {
+          owner,
+        },
       },
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${account.accessToken}`,
-        'Linkedin-Version': LINKEDIN_VERSION,
-        'X-Restli-Protocol-Version': '2.0.0',
-        'Content-Type': 'application/json',
-      },
-    }
-  );
+      {
+        headers: {
+          Authorization: `Bearer ${account.accessToken}`,
+          'Linkedin-Version': LINKEDIN_VERSION,
+          'X-Restli-Protocol-Version': '2.0.0',
+          'Content-Type': 'application/json',
+        },
+      }
+    );
 
-  const uploadUrl = registerRes.data.value.uploadUrl;
-  const documentUrn = registerRes.data.value.document;
+    const uploadUrl = registerRes.data.value.uploadUrl;
+    const documentUrn = registerRes.data.value.document;
 
-  console.log('[LinkedIn] Document URN:', documentUrn);
-  console.log('[LinkedIn] Upload URL obtida');
+    console.log('[LinkedIn] Document URN:', documentUrn);
+    console.log('[LinkedIn] Upload URL obtida');
 
-  return { uploadUrl, documentUrn };
+    return { uploadUrl, documentUrn };
+  } catch (err: any) {
+    console.error('[LinkedIn] Erro ao registrar upload:', err.response?.data || err.message);
+    throw err;
+  }
 }
 
 // Etapa 2: Fazer upload do PDF
