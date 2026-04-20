@@ -8,19 +8,19 @@ interface LinkedInAccount {
 
 const LINKEDIN_VERSION = '202504';
 
-// Buscar person ID pelo token
+// Obter person ID correto via /v2/me (não /v2/userinfo)
 export async function getLinkedInPersonId(accessToken: string): Promise<string> {
-  console.log('[LinkedIn] Buscando person ID pelo token...');
+  console.log('[LinkedIn] Buscando person ID via /v2/me...');
   
-  const res = await axios.get('https://api.linkedin.com/v2/userinfo', {
+  const res = await axios.get('https://api.linkedin.com/v2/me', {
     headers: {
       Authorization: `Bearer ${accessToken}`,
+      'Linkedin-Version': LINKEDIN_VERSION,
     },
   });
   
-  // O sub contém o person ID
-  const personId = res.data.sub;
-  console.log('[LinkedIn] Person ID encontrado:', personId);
+  const personId = res.data.id;
+  console.log('[LinkedIn] Person ID correto:', personId);
   
   return personId;
 }
@@ -36,22 +36,23 @@ export async function registerDocumentUpload(
   console.log('[LinkedIn] Registrando upload de documento...');
   console.log('[LinkedIn] Owner:', owner);
 
+  const baseHeaders = {
+    Authorization: `Bearer ${account.accessToken}`,
+    'Linkedin-Version': LINKEDIN_VERSION,
+    'X-Restli-Protocol-Version': '2.0.0',
+    'Content-Type': 'application/json',
+  };
+
   try {
+    // BUG 1 CORRIGIDO: endpoint correto com ?action=initializeUpload
     const registerRes = await axios.post(
-      'https://api.linkedin.com/rest/documents',
+      'https://api.linkedin.com/rest/documents?action=initializeUpload',
       {
         initializeUploadRequest: {
           owner,
         },
       },
-      {
-        headers: {
-          Authorization: `Bearer ${account.accessToken}`,
-          'Linkedin-Version': LINKEDIN_VERSION,
-          'X-Restli-Protocol-Version': '2.0.0',
-          'Content-Type': 'application/json',
-        },
-      }
+      { headers: baseHeaders }
     );
 
     const uploadUrl = registerRes.data.value.uploadUrl;
@@ -84,22 +85,42 @@ export async function uploadDocument(
   console.log('[LinkedIn] Upload concluído!');
 }
 
-// Etapa 3: Verificar status do documento
-export async function checkDocumentStatus(
+// Etapa 3: Poll até documento ficar AVAILABLE
+export async function waitForDocumentAvailable(
   account: LinkedInAccount,
   documentUrn: string
-): Promise<string> {
-  const statusRes = await axios.get(
-    `https://api.linkedin.com/rest/documents/${encodeURIComponent(documentUrn)}`,
-    {
-      headers: {
-        Authorization: `Bearer ${account.accessToken}`,
-        'Linkedin-Version': LINKEDIN_VERSION,
-      },
-    }
-  );
-  
-  return statusRes.data.status; // 'AVAILABLE' ou 'PROCESSING'
+): Promise<void> {
+  const baseHeaders = {
+    Authorization: `Bearer ${account.accessToken}`,
+    'Linkedin-Version': LINKEDIN_VERSION,
+    'X-Restli-Protocol-Version': '2.0.0',
+  };
+
+  const encodedUrn = encodeURIComponent(documentUrn);
+  let status = '';
+  let attempts = 0;
+  const maxAttempts = 10;
+
+  console.log('[LinkedIn] Aguardando documento ficar AVAILABLE...');
+
+  while (status !== 'AVAILABLE' && attempts < maxAttempts) {
+    await new Promise(r => setTimeout(r, 3000)); // aguarda 3s
+    
+    const statusRes = await axios.get(
+      `https://api.linkedin.com/rest/documents/${encodedUrn}`,
+      { headers: baseHeaders }
+    );
+    
+    status = statusRes.data.status;
+    attempts++;
+    console.log(`[LinkedIn] [${attempts}/${maxAttempts}] Document status: ${status}`);
+  }
+
+  if (status !== 'AVAILABLE') {
+    throw new Error('Timeout: documento não ficou disponível após processamento');
+  }
+
+  console.log('[LinkedIn] Documento pronto!');
 }
 
 // Etapa 4: Criar post via Posts API
@@ -116,6 +137,13 @@ export async function createLinkedInPost(
   console.log('[LinkedIn] Criando post via Posts API...');
   console.log('[LinkedIn] Author:', author);
   console.log('[LinkedIn] Document:', documentUrn);
+
+  const baseHeaders = {
+    Authorization: `Bearer ${account.accessToken}`,
+    'Linkedin-Version': LINKEDIN_VERSION,
+    'X-Restli-Protocol-Version': '2.0.0',
+    'Content-Type': 'application/json',
+  };
 
   const postRes = await axios.post(
     'https://api.linkedin.com/rest/posts',
@@ -137,21 +165,15 @@ export async function createLinkedInPost(
       lifecycleState: 'PUBLISHED',
       isReshareDisabledByAuthor: false,
     },
-    {
-      headers: {
-        Authorization: `Bearer ${account.accessToken}`,
-        'Linkedin-Version': LINKEDIN_VERSION,
-        'X-Restli-Protocol-Version': '2.0.0',
-        'Content-Type': 'application/json',
-      },
-    }
+    { headers: baseHeaders }
   );
 
-  const postUrn = postRes.headers['x-restli-id'] || '';
-  console.log('[LinkedIn] Post criado! URN:', postUrn);
+  const postId = postRes.headers['x-restli-id'] || postRes.headers['x-linkedin-id'] || '';
+  console.log('[LinkedIn] Post criado! ID:', postId);
   console.log('[LinkedIn] Response status:', postRes.status);
+  console.log('[LinkedIn] Verificar em: https://www.linkedin.com/feed/update/' + postId + '/');
 
-  return postUrn;
+  return postId;
 }
 
 // Fluxo completo: publicar carrossel
@@ -161,25 +183,19 @@ export async function publishCarouselToLinkedIn(
   commentary: string,
   title: string
 ): Promise<{ postUrn: string; documentUrn: string }> {
+  // Se não tiver personId, buscar
+  if (!account.personId && !account.pageId) {
+    account.personId = await getLinkedInPersonId(account.accessToken);
+  }
+
   // Etapa 1: Registrar upload
   const { uploadUrl, documentUrn } = await registerDocumentUpload(account);
   
   // Etapa 2: Upload do PDF
   await uploadDocument(uploadUrl, pdfBuffer);
   
-  // Etapa 3: Aguardar processamento (com retry)
-  let attempts = 0;
-  let status = 'PROCESSING';
-  while (status !== 'AVAILABLE' && attempts < 10) {
-    await new Promise(r => setTimeout(r, 1000));
-    status = await checkDocumentStatus(account, documentUrn);
-    attempts++;
-    console.log(`[LinkedIn] Status do documento: ${status} (tentativa ${attempts})`);
-  }
-  
-  if (status !== 'AVAILABLE') {
-    throw new Error('Documento não ficou disponível após processamento');
-  }
+  // Etapa 3: Aguardar processamento (BUG 4 CORRIGIDO)
+  await waitForDocumentAvailable(account, documentUrn);
   
   // Etapa 4: Criar post
   const postUrn = await createLinkedInPost(account, documentUrn, commentary, title);
