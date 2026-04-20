@@ -2,6 +2,8 @@ import { Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import Anthropic from '@anthropic-ai/sdk';
 import { AuthRequest } from '../middleware/authGuard';
+import { generateCarouselPDF } from '../services/carouselPdf';
+import { uploadDocumentToLinkedIn, createLinkedInDocumentPost } from '../services/linkedinPublish';
 
 const prisma = new PrismaClient();
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -186,14 +188,52 @@ export async function publishCarousel(req: AuthRequest, res: Response) {
     });
     if (!carousel) return res.status(404).json({ error: 'Carrossel não encontrado' });
 
-    // TODO: Implementar PDF + LinkedIn upload
+    // Buscar conta LinkedIn do usuário
+    const linkedInAccount = await prisma.socialAccount.findFirst({
+      where: { userId: req.effectiveUserId!, platform: 'linkedin' },
+    });
+    if (!linkedInAccount) {
+      return res.status(400).json({ error: 'Conta LinkedIn não conectada' });
+    }
+
+    // Gerar PDF
+    const pdfBuffer = await generateCarouselPDF(carousel.slides as any[]);
+
+    // Upload para LinkedIn
+    const assetUrn = await uploadDocumentToLinkedIn(
+      { accessToken: linkedInAccount.accessToken, pageId: linkedInAccount.pageId || undefined },
+      pdfBuffer,
+      carousel.title
+    );
+
+    // Criar post no LinkedIn
+    const firstSlide = (carousel.slides as any[])[0];
+    const postText = `${firstSlide?.title || carousel.title}\n\n${firstSlide?.body || ''}`;
+    
+    const linkedInPostUrn = await createLinkedInDocumentPost(
+      { accessToken: linkedInAccount.accessToken, pageId: linkedInAccount.pageId || undefined },
+      assetUrn,
+      postText,
+      carousel.title
+    );
+
+    // Atualizar carrossel como publicado
     const updated = await prisma.carousel.update({
       where: { id },
-      data: { status: 'published', publishedAt: new Date() },
+      data: { 
+        status: 'published', 
+        publishedAt: new Date(),
+        linkedinUrn: linkedInPostUrn,
+      },
     });
 
-    return res.json({ ok: true, carousel: updated });
+    return res.json({ 
+      ok: true, 
+      carousel: updated,
+      linkedInPostUrn,
+    });
   } catch (err: any) {
-    return res.status(500).json({ error: 'Erro ao publicar carrossel' });
+    console.error('[publishCarousel]', err);
+    return res.status(500).json({ error: 'Erro ao publicar carrossel', details: err.message });
   }
 }
