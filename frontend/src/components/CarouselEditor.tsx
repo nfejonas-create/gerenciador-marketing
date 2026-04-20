@@ -154,7 +154,7 @@ export default function CarouselEditor({ slides, onChange, onGenerateImage }: Ca
                 : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
             }`}
           >
-            {style === 'cover' > 'Capa' : style === 'content' ? 'Conteúdo' : 'CTA'}
+            {style === 'cover' ? 'Capa' : style === 'content' ? 'Conteúdo' : 'CTA'}
           </button>
         ))}
       </div>
