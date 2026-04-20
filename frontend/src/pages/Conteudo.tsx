@@ -648,7 +648,7 @@ export default function Conteudo() {
                   )}
                   {generated.hashtags && (
                     <div className="flex flex-wrap gap-2">
-                      {generated.hashtags.map((h: string, i: number) => (
+                      {(Array.isArray(generated.hashtags) ? generated.hashtags : String(generated.hashtags).split(/\s+/)).map((h: string, i: number) => (
                         <span key={i} className="bg-gray-800 text-blue-400 text-xs px-2 py-1 rounded">{h}</span>
                       ))}
                     </div>
@@ -760,7 +760,7 @@ export default function Conteudo() {
                   </div>
                   {post.cta && <div className="bg-blue-900/20 border border-blue-800 rounded-lg px-4 py-2"><p className="text-blue-300 text-sm">CTA: {post.cta}</p></div>}
                   <div className="flex flex-wrap gap-2">
-                    {post.hashtags?.map((h: string, j: number) => <span key={j} className="bg-gray-800 text-blue-400 text-xs px-2 py-1 rounded">{h}</span>)}
+                    {(Array.isArray(post.hashtags) ? post.hashtags : (post.hashtags || '').split(/\s+/).filter(Boolean)).map((h: string, j: number) => <span key={j} className="bg-gray-800 text-blue-400 text-xs px-2 py-1 rounded">{h}</span>)}
                   </div>
                 </div>
               ))}
