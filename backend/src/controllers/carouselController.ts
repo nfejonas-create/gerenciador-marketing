@@ -3,7 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import Anthropic from '@anthropic-ai/sdk';
 import { AuthRequest } from '../middleware/authGuard';
 import { generateCarouselPDF } from '../services/carouselPdf';
-import { uploadDocumentToLinkedIn, createLinkedInDocumentPost } from '../services/linkedinPublish';
+import { publishCarouselToLinkedIn } from '../services/linkedinPublish';
 
 const prisma = new PrismaClient();
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -196,23 +196,26 @@ export async function publishCarousel(req: AuthRequest, res: Response) {
       return res.status(400).json({ error: 'Conta LinkedIn não conectada' });
     }
 
+    // Buscar usuário para obter linkedinId
+    const user = await prisma.user.findUnique({
+      where: { id: req.effectiveUserId! },
+      select: { linkedinId: true },
+    });
+
     // Gerar PDF do carrossel
     const pdfBuffer = await generateCarouselPDF(carousel.slides as any[]);
 
-    // Upload do PDF como documento para LinkedIn
-    const assetUrn = await uploadDocumentToLinkedIn(
-      { accessToken: linkedInAccount.accessToken, pageId: linkedInAccount.pageId || undefined },
-      pdfBuffer,
-      carousel.title
-    );
-
-    // Criar post com o documento PDF
+    // Publicar no LinkedIn usando nova API
     const firstSlide = (carousel.slides as any[])[0];
-    const postText = `📊 ${carousel.title}\n\n${firstSlide?.body || ''}\n\n#carrossel #conteúdo`;
+    const postText = `📊 ${carousel.title}\n\n${firstSlide?.body || ''}\n\n#carrossel #conteudo`;
     
-    const linkedInPostUrn = await createLinkedInDocumentPost(
-      { accessToken: linkedInAccount.accessToken, pageId: linkedInAccount.pageId || undefined },
-      assetUrn,
+    const { postUrn, documentUrn } = await publishCarouselToLinkedIn(
+      { 
+        accessToken: linkedInAccount.accessToken, 
+        personId: user?.linkedinId || linkedInAccount.pageId || undefined,
+        pageId: linkedInAccount.pageId || undefined 
+      },
+      pdfBuffer,
       postText,
       carousel.title
     );
@@ -223,14 +226,15 @@ export async function publishCarousel(req: AuthRequest, res: Response) {
       data: { 
         status: 'published', 
         publishedAt: new Date(),
-        linkedinUrn: linkedInPostUrn,
+        linkedinUrn: postUrn,
       },
     });
 
     return res.json({ 
       ok: true, 
       carousel: updated,
-      linkedInPostUrn,
+      linkedInPostUrn: postUrn,
+      documentUrn,
     });
   } catch (err: any) {
     console.error('[publishCarousel]', err);

@@ -2,106 +2,165 @@ import axios from 'axios';
 
 interface LinkedInAccount {
   accessToken: string;
+  personId?: string;
   pageId?: string;
 }
 
-export async function uploadDocumentToLinkedIn(
-  account: LinkedInAccount,
-  pdfBuffer: Buffer,
-  title: string
-): Promise<string> {
+const LINKEDIN_VERSION = '202504';
+
+// Etapa 1: Registrar upload do documento via Documents API
+export async function registerDocumentUpload(
+  account: LinkedInAccount
+): Promise<{ uploadUrl: string; documentUrn: string }> {
+  const owner = account.pageId 
+    ? `urn:li:organization:${account.pageId}`
+    : `urn:li:person:${account.personId}`;
+
   console.log('[LinkedIn] Registrando upload de documento...');
-  
+  console.log('[LinkedIn] Owner:', owner);
+
   const registerRes = await axios.post(
-    'https://api.linkedin.com/v2/assets?action=registerUpload',
+    'https://api.linkedin.com/rest/documents',
     {
-      registerUploadRequest: {
-        recipes: ['urn:li:digitalmediaRecipe:feedshare-document'],
-        owner: account.pageId ? `urn:li:organization:${account.pageId}` : 'urn:li:person',
-        serviceRelationships: [{
-          relationshipType: 'OWNER',
-          identifier: 'urn:li:userGeneratedContent',
-        }],
+      initializeUploadRequest: {
+        owner,
       },
     },
     {
       headers: {
         Authorization: `Bearer ${account.accessToken}`,
+        'Linkedin-Version': LINKEDIN_VERSION,
+        'X-Restli-Protocol-Version': '2.0.0',
         'Content-Type': 'application/json',
       },
     }
   );
 
-  const uploadUrl = registerRes.data.value.uploadMechanism['com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest'].uploadUrl;
-  const assetUrn = registerRes.data.value.asset;
-  
-  console.log('[LinkedIn] Asset URN:', assetUrn);
+  const uploadUrl = registerRes.data.value.uploadUrl;
+  const documentUrn = registerRes.data.value.document;
 
+  console.log('[LinkedIn] Document URN:', documentUrn);
+  console.log('[LinkedIn] Upload URL obtida');
+
+  return { uploadUrl, documentUrn };
+}
+
+// Etapa 2: Fazer upload do PDF
+export async function uploadDocument(
+  uploadUrl: string,
+  pdfBuffer: Buffer
+): Promise<void> {
   console.log('[LinkedIn] Fazendo upload do PDF...');
+  
   await axios.put(uploadUrl, pdfBuffer, {
     headers: {
-      'Content-Type': 'application/pdf',
+      'Content-Type': 'application/octet-stream',
     },
+    maxBodyLength: Infinity,
   });
   
   console.log('[LinkedIn] Upload concluído!');
-
-  return assetUrn;
 }
 
-export async function createLinkedInDocumentPost(
+// Etapa 3: Verificar status do documento
+export async function checkDocumentStatus(
   account: LinkedInAccount,
-  assetUrn: string,
-  text: string,
+  documentUrn: string
+): Promise<string> {
+  const statusRes = await axios.get(
+    `https://api.linkedin.com/rest/documents/${encodeURIComponent(documentUrn)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${account.accessToken}`,
+        'Linkedin-Version': LINKEDIN_VERSION,
+      },
+    }
+  );
+  
+  return statusRes.data.status; // 'AVAILABLE' ou 'PROCESSING'
+}
+
+// Etapa 4: Criar post via Posts API
+export async function createLinkedInPost(
+  account: LinkedInAccount,
+  documentUrn: string,
+  commentary: string,
   title: string
 ): Promise<string> {
   const author = account.pageId 
-    ? `urn:li:organization:${account.pageId}` 
-    : 'urn:li:person';
+    ? `urn:li:organization:${account.pageId}`
+    : `urn:li:person:${account.personId}`;
 
-  console.log('[LinkedIn] Criando post com documento...');
+  console.log('[LinkedIn] Criando post via Posts API...');
   console.log('[LinkedIn] Author:', author);
-  console.log('[LinkedIn] Asset:', assetUrn);
+  console.log('[LinkedIn] Document:', documentUrn);
 
   const postRes = await axios.post(
-    'https://api.linkedin.com/v2/ugcPosts',
+    'https://api.linkedin.com/rest/posts',
     {
       author,
-      lifecycleState: 'PUBLISHED',
-      specificContent: {
-        'com.linkedin.ugc.ShareContent': {
-          shareCommentary: {
-            text,
-          },
-          shareMediaCategory: 'DOCUMENT',
-          media: [{
-            status: 'READY',
-            description: {
-              text: title,
-            },
-            media: assetUrn,
-            title: {
-              text: title,
-            },
-          }],
+      commentary,
+      visibility: 'PUBLIC',
+      distribution: {
+        feedDistribution: 'MAIN_FEED',
+        targetEntities: [],
+        thirdPartyDistributionChannels: [],
+      },
+      content: {
+        media: {
+          title,
+          id: documentUrn,
         },
       },
-      visibility: {
-        'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC',
-      },
+      lifecycleState: 'PUBLISHED',
+      isReshareDisabledByAuthor: false,
     },
     {
       headers: {
         Authorization: `Bearer ${account.accessToken}`,
-        'Content-Type': 'application/json',
+        'Linkedin-Version': LINKEDIN_VERSION,
         'X-Restli-Protocol-Version': '2.0.0',
+        'Content-Type': 'application/json',
       },
     }
   );
 
-  console.log('[LinkedIn] Post response status:', postRes.status);
-  console.log('[LinkedIn] Post response headers:', JSON.stringify(postRes.headers));
-  console.log('[LinkedIn] x-restli-id:', postRes.headers['x-restli-id']);
+  const postUrn = postRes.headers['x-restli-id'] || '';
+  console.log('[LinkedIn] Post criado! URN:', postUrn);
+  console.log('[LinkedIn] Response status:', postRes.status);
 
-  return postRes.headers['x-restli-id'] || postRes.data?.id || '';
+  return postUrn;
+}
+
+// Fluxo completo: publicar carrossel
+export async function publishCarouselToLinkedIn(
+  account: LinkedInAccount,
+  pdfBuffer: Buffer,
+  commentary: string,
+  title: string
+): Promise<{ postUrn: string; documentUrn: string }> {
+  // Etapa 1: Registrar upload
+  const { uploadUrl, documentUrn } = await registerDocumentUpload(account);
+  
+  // Etapa 2: Upload do PDF
+  await uploadDocument(uploadUrl, pdfBuffer);
+  
+  // Etapa 3: Aguardar processamento (com retry)
+  let attempts = 0;
+  let status = 'PROCESSING';
+  while (status !== 'AVAILABLE' && attempts < 10) {
+    await new Promise(r => setTimeout(r, 1000));
+    status = await checkDocumentStatus(account, documentUrn);
+    attempts++;
+    console.log(`[LinkedIn] Status do documento: ${status} (tentativa ${attempts})`);
+  }
+  
+  if (status !== 'AVAILABLE') {
+    throw new Error('Documento não ficou disponível após processamento');
+  }
+  
+  // Etapa 4: Criar post
+  const postUrn = await createLinkedInPost(account, documentUrn, commentary, title);
+  
+  return { postUrn, documentUrn };
 }
