@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, FileText, TrendingUp, Calendar, Settings, LogOut, Zap, Database } from 'lucide-react';
+import { LayoutDashboard, FileText, TrendingUp, Calendar, Settings, LogOut, Zap, Database, Users } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import UserSwitcher from './UserSwitcher';
 
 const links = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -30,10 +31,19 @@ export default function Sidebar() {
             {label}
           </NavLink>
         ))}
+        {user?.role === 'ADMIN' && (
+          <NavLink to="/admin/users" className={({ isActive }) =>
+            `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors mt-4 ${isActive ? 'bg-purple-600 text-white' : 'text-purple-400 hover:bg-gray-800 hover:text-purple-300'}`
+          }>
+            <Users size={18} />
+            Gerenciar Usuarios
+          </NavLink>
+        )}
       </nav>
-      <div className="p-4 border-t border-gray-800">
+      <div className="p-4 border-t border-gray-800 space-y-3">
+        {user?.role === 'ADMIN' && <UserSwitcher />}
         {user && (
-          <div className="flex items-center gap-3 mb-3">
+          <div className="flex items-center gap-3">
             {user.avatar ? <img src={user.avatar} className="w-8 h-8 rounded-full" alt={user.name} /> : <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-sm font-bold">{user.name[0]}</div>}
             <div className="min-w-0"><p className="text-sm font-medium text-white truncate">{user.name}</p><p className="text-xs text-gray-400 truncate">{user.email}</p></div>
           </div>

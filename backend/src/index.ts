@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import passport from 'passport';
 import authRoutes from './routes/auth';
+import adminRoutes from './routes/admin';
 import socialRoutes from './routes/social';
 import metricsRoutes from './routes/metrics';
 import contentRoutes from './routes/content';
@@ -22,6 +23,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(passport.initialize());
 
 app.use('/auth', authRoutes);
+app.use('/admin', adminRoutes);
 app.use('/social', socialRoutes);
 app.use('/metrics', metricsRoutes);
 app.use('/content', contentRoutes);

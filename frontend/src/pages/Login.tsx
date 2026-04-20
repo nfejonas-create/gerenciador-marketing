@@ -23,7 +23,7 @@ export default function Login() {
       const endpoint = mode === 'login' ? '/auth/login' : '/auth/register';
       const body = mode === 'login' ? { email, password } : { email, name, password };
       const { data } = await api.post(endpoint, body);
-      login(data.token);
+      login(data.token, data.user, data.users);
       navigate('/dashboard');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Erro ao autenticar');

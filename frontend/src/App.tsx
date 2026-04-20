@@ -9,10 +9,17 @@ import Configuracoes from './pages/Configuracoes';
 import AuthCallback from './pages/AuthCallback';
 import BaseConhecimento from './pages/BaseConhecimento';
 import Layout from './components/Layout';
+import AdminUsers from './pages/admin/Users';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { token } = useAuth();
   return token ? <>{children}</> : <Navigate to="/login" />;
+}
+
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  if (!user) return null;
+  return user.role === 'ADMIN' ? <>{children}</> : <Navigate to="/dashboard" />;
 }
 
 export default function App() {
@@ -30,6 +37,7 @@ export default function App() {
             <Route path="funil" element={<Funil />} />
             <Route path="calendario" element={<Calendario />} />
             <Route path="configuracoes" element={<Configuracoes />} />
+            <Route path="admin/users" element={<AdminRoute><AdminUsers /></AdminRoute>} />
           </Route>
         </Routes>
       </BrowserRouter>
