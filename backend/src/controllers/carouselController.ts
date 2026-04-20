@@ -2,8 +2,8 @@ import { Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import Anthropic from '@anthropic-ai/sdk';
 import { AuthRequest } from '../middleware/authGuard';
-import { generateCarouselPDF, generateSlideImages } from '../services/carouselPdf';
-import { uploadDocumentToLinkedIn, createLinkedInDocumentPost, createLinkedInCarouselPost } from '../services/linkedinPublish';
+import { generateCarouselPDF } from '../services/carouselPdf';
+import { uploadDocumentToLinkedIn, createLinkedInDocumentPost } from '../services/linkedinPublish';
 
 const prisma = new PrismaClient();
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -196,16 +196,23 @@ export async function publishCarousel(req: AuthRequest, res: Response) {
       return res.status(400).json({ error: 'Conta LinkedIn não conectada' });
     }
 
-    // Gerar imagens PNG de cada slide
-    const slideImages = await generateSlideImages(carousel.slides as any[]);
+    // Gerar PDF do carrossel
+    const pdfBuffer = await generateCarouselPDF(carousel.slides as any[]);
 
-    // Criar post com múltiplas imagens (carrossel)
-    const firstSlide = (carousel.slides as any[])[0];
-    const postText = `${firstSlide?.title || carousel.title}\n\n${firstSlide?.body || ''}`;
-    
-    const linkedInPostUrn = await createLinkedInCarouselPost(
+    // Upload do PDF como documento para LinkedIn
+    const assetUrn = await uploadDocumentToLinkedIn(
       { accessToken: linkedInAccount.accessToken, pageId: linkedInAccount.pageId || undefined },
-      slideImages,
+      pdfBuffer,
+      carousel.title
+    );
+
+    // Criar post com o documento PDF
+    const firstSlide = (carousel.slides as any[])[0];
+    const postText = `📊 ${carousel.title}\n\n${firstSlide?.body || ''}\n\n#carrossel #conteúdo`;
+    
+    const linkedInPostUrn = await createLinkedInDocumentPost(
+      { accessToken: linkedInAccount.accessToken, pageId: linkedInAccount.pageId || undefined },
+      assetUrn,
       postText,
       carousel.title
     );
