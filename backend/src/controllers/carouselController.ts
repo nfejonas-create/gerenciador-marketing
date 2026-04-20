@@ -2,8 +2,8 @@ import { Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import Anthropic from '@anthropic-ai/sdk';
 import { AuthRequest } from '../middleware/authGuard';
-import { generateCarouselPDF } from '../services/carouselPdf';
-import { uploadDocumentToLinkedIn, createLinkedInDocumentPost } from '../services/linkedinPublish';
+import { generateCarouselPDF, generateSlideImages } from '../services/carouselPdf';
+import { uploadDocumentToLinkedIn, createLinkedInDocumentPost, createLinkedInCarouselPost } from '../services/linkedinPublish';
 
 const prisma = new PrismaClient();
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -196,23 +196,16 @@ export async function publishCarousel(req: AuthRequest, res: Response) {
       return res.status(400).json({ error: 'Conta LinkedIn não conectada' });
     }
 
-    // Gerar PDF
-    const pdfBuffer = await generateCarouselPDF(carousel.slides as any[]);
+    // Gerar imagens PNG de cada slide
+    const slideImages = await generateSlideImages(carousel.slides as any[]);
 
-    // Upload para LinkedIn
-    const assetUrn = await uploadDocumentToLinkedIn(
-      { accessToken: linkedInAccount.accessToken, pageId: linkedInAccount.pageId || undefined },
-      pdfBuffer,
-      carousel.title
-    );
-
-    // Criar post no LinkedIn
+    // Criar post com múltiplas imagens (carrossel)
     const firstSlide = (carousel.slides as any[])[0];
     const postText = `${firstSlide?.title || carousel.title}\n\n${firstSlide?.body || ''}`;
     
-    const linkedInPostUrn = await createLinkedInDocumentPost(
+    const linkedInPostUrn = await createLinkedInCarouselPost(
       { accessToken: linkedInAccount.accessToken, pageId: linkedInAccount.pageId || undefined },
-      assetUrn,
+      slideImages,
       postText,
       carousel.title
     );

@@ -1,4 +1,5 @@
 import PDFDocument from 'pdfkit';
+import { createCanvas, loadImage } from 'canvas';
 
 interface Slide {
   slide: number;
@@ -15,6 +16,7 @@ const COLORS = {
   cta: { bg: '#2563EB', text: '#FFFFFF', accent: '#60A5FA' },
 };
 
+// Gerar PDF (mantido para download)
 export async function generateCarouselPDF(slides: Slide[]): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     try {
@@ -30,15 +32,12 @@ export async function generateCarouselPDF(slides: Slide[]): Promise<Buffer> {
         
         const colors = COLORS[slide.style];
         
-        // Fundo
         doc.rect(0, 0, 1080, 1080).fill(colors.bg);
         
-        // Emoji
         doc.fontSize(80)
            .fillColor(colors.text)
            .text(slide.emoji, 80, 100, { align: 'left' });
         
-        // Título
         const titleY = slide.style === 'cover' ? 350 : 250;
         const titleSize = slide.style === 'cover' ? 72 : 48;
         doc.fontSize(titleSize)
@@ -50,7 +49,6 @@ export async function generateCarouselPDF(slides: Slide[]): Promise<Buffer> {
              lineGap: 10
            });
         
-        // Corpo
         const bodyY = slide.style === 'cover' ? 550 : 450;
         const bodySize = slide.style === 'cover' ? 36 : 28;
         doc.fontSize(bodySize)
@@ -62,7 +60,6 @@ export async function generateCarouselPDF(slides: Slide[]): Promise<Buffer> {
              lineGap: 15
            });
         
-        // Número do slide (cantinho)
         doc.fontSize(24)
            .fillColor(colors.accent)
            .text(`${slide.slide}/${slides.length}`, 980, 1020, { align: 'right' });
@@ -73,4 +70,86 @@ export async function generateCarouselPDF(slides: Slide[]): Promise<Buffer> {
       reject(err);
     }
   });
+}
+
+// Gerar imagens PNG de cada slide para carrossel LinkedIn
+export async function generateSlideImages(slides: Slide[]): Promise<Buffer[]> {
+  const images: Buffer[] = [];
+  
+  for (const slide of slides) {
+    const canvas = createCanvas(1080, 1080);
+    const ctx = canvas.getContext('2d');
+    const colors = COLORS[slide.style];
+    
+    // Fundo
+    ctx.fillStyle = colors.bg;
+    ctx.fillRect(0, 0, 1080, 1080);
+    
+    // Emoji
+    ctx.font = '80px Arial';
+    ctx.fillStyle = colors.text;
+    ctx.textAlign = 'left';
+    ctx.fillText(slide.emoji, 80, 160);
+    
+    // Título
+    ctx.font = slide.style === 'cover' ? 'bold 72px Arial' : 'bold 48px Arial';
+    ctx.fillStyle = colors.text;
+    const titleY = slide.style === 'cover' ? 400 : 300;
+    
+    if (slide.style === 'cover') {
+      ctx.textAlign = 'center';
+      wrapText(ctx, slide.title, 540, titleY, 920, 80);
+    } else {
+      ctx.textAlign = 'left';
+      wrapText(ctx, slide.title, 80, titleY, 920, 60);
+    }
+    
+    // Corpo
+    ctx.font = slide.style === 'cover' ? '36px Arial' : '28px Arial';
+    ctx.fillStyle = colors.accent;
+    const bodyY = slide.style === 'cover' ? 600 : 500;
+    
+    if (slide.style === 'cover') {
+      ctx.textAlign = 'center';
+      wrapText(ctx, slide.body, 540, bodyY, 920, 45);
+    } else {
+      ctx.textAlign = 'left';
+      wrapText(ctx, slide.body, 80, bodyY, 920, 40);
+    }
+    
+    // Número do slide
+    ctx.font = '24px Arial';
+    ctx.fillStyle = colors.accent;
+    ctx.textAlign = 'right';
+    ctx.fillText(`${slide.slide}/${slides.length}`, 1000, 1040);
+    
+    // Converter para PNG buffer
+    const buffer = canvas.toBuffer('image/png');
+    images.push(buffer);
+  }
+  
+  return images;
+}
+
+// Função auxiliar para quebrar texto em múltiplas linhas
+function wrapText(ctx: any, text: string, x: number, y: number, maxWidth: number, lineHeight: number) {
+  const words = text.split(' ');
+  let line = '';
+  let currentY = y;
+  
+  for (let i = 0; i < words.length; i++) {
+    const testLine = line + words[i] + ' ';
+    const metrics = ctx.measureText(testLine);
+    const testWidth = metrics.width;
+    
+    if (testWidth > maxWidth && i > 0) {
+      ctx.fillText(line, x, currentY);
+      line = words[i] + ' ';
+      currentY += lineHeight;
+    } else {
+      line = testLine;
+    }
+  }
+  
+  ctx.fillText(line, x, currentY);
 }
