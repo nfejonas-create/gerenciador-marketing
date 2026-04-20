@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { CheckCircle, AlertCircle, Save, Brain, BookOpen } from 'lucide-react';
+import { CheckCircle, AlertCircle, Save, Brain } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -37,7 +37,6 @@ export default function Configuracoes() {
 
   // Instrucoes IA
   const [aiInstructions, setAiInstructions] = useState(GANCHO_TEMPLATE);
-  const [savedAiInstructions, setSavedAiInstructions] = useState('');
   const [savingAi, setSavingAi] = useState(false);
   const [aiSaved, setAiSaved] = useState(false);
 
@@ -58,10 +57,7 @@ export default function Configuracoes() {
 
     // Carrega instrucoes da IA salvas
     api.get('/auth/settings').then(r => {
-      if (r.data?.aiInstructions) {
-        setAiInstructions(r.data.aiInstructions);
-        setSavedAiInstructions(r.data.aiInstructions);
-      }
+      if (r.data?.aiInstructions) setAiInstructions(r.data.aiInstructions);
     }).catch(() => {});
   }, []);
 
@@ -83,7 +79,6 @@ export default function Configuracoes() {
     setSavingAi(true);
     try {
       await api.put('/auth/settings', { aiInstructions });
-      setSavedAiInstructions(aiInstructions);
       setAiSaved(true);
       setTimeout(() => setAiSaved(false), 2000);
     } catch { alert('Erro ao salvar instrucoes'); } finally { setSavingAi(false); }
@@ -130,17 +125,13 @@ export default function Configuracoes() {
           />
         </div>
         <div>
-          <label className="text-xs text-gray-500 block mb-1">Member ID numerico <span className="text-yellow-500">(obrigatorio para publicar)</span></label>
+          <label className="text-xs text-gray-500 block mb-1">Organization ID (deixe vazio para perfil pessoal)</label>
           <input
-            placeholder="Ex: 123456789 — ID numerico do seu perfil"
+            placeholder="Ex: 12345678 (ID da empresa no LinkedIn)"
             value={li.pageId}
             onChange={e => setLi(x => ({ ...x, pageId: e.target.value }))}
             className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
           />
-          <p className="text-xs text-gray-600 mt-1">
-            Para encontrar: abra o LinkedIn → seu perfil → F12 → aba Network → recarregue → filtre por "me?" → veja o campo "id" na resposta.
-            Ou acesse: <a href="https://www.linkedin.com/in/jonas-breitenbach-857a04167" target="_blank" rel="noreferrer" className="text-blue-500 hover:underline">seu perfil</a> → clique nos 3 pontinhos → "Copiar URL do perfil" → o numero no final nao e o ID numerico.
-          </p>
         </div>
         <div>
           <label className="text-xs text-gray-500 block mb-1">Nome (para identificar)</label>
@@ -159,9 +150,8 @@ export default function Configuracoes() {
         </button>
         <p className="text-xs text-gray-600">
           Para gerar um token com os escopos corretos, acesse:
-          <a href="https://www.linkedin.com/developers/tools/oauth" target="_blank" rel="noreferrer" className="text-blue-500 ml-1 hover:underline">LinkedIn OAuth Tools</a>
+          <a href="https://www.linkedin.com/developers/tools/oauth/redirect" target="_blank" rel="noreferrer" className="text-blue-500 ml-1 hover:underline">LinkedIn OAuth Tool</a>
           — escopos necessarios: <code className="bg-gray-800 px-1 rounded">w_member_social r_liteprofile</code>
-          . Copie o Access Token gerado e cole no campo acima.
         </p>
       </div>
 
@@ -207,10 +197,9 @@ export default function Configuracoes() {
           <Save size={14} /> {saving === 'facebook' ? 'Salvando...' : 'Salvar token Facebook'}
         </button>
         <p className="text-xs text-gray-600">
-          <strong className="text-yellow-500">IMPORTANTE:</strong> Use o token da PAGINA, nao do usuario.
-          Passo a passo: acesse <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noreferrer" className="text-blue-500 hover:underline">Graph API Explorer</a>
-          → selecione sua Pagina no topo → permissoes <code className="bg-gray-800 px-1 rounded">pages_manage_posts pages_read_engagement</code>
-          → clique "Gerar token de acesso" → copie o token da Pagina. O Page ID aparece no URL da sua pagina (ex: facebook.com/<strong>123456789</strong>).
+          Pegar token em:
+          <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noreferrer" className="text-blue-500 ml-1 hover:underline">Graph API Explorer</a>
+          — selecione "Token da Pagina" com permissoes <code className="bg-gray-800 px-1 rounded">pages_manage_posts</code>
         </p>
       </div>
 
@@ -223,28 +212,12 @@ export default function Configuracoes() {
         <p className="text-xs text-gray-500">
           Essas instrucoes orientam como a IA gera seus posts. Edite a estrutura, tom e exemplos conforme sua estrategia.
         </p>
-
-        {savedAiInstructions && (
-          <div className="bg-gray-800 border border-gray-700 rounded-lg p-4 space-y-2">
-            <div className="flex items-center gap-2 mb-2">
-              <BookOpen size={14} className="text-green-400" />
-              <p className="text-xs font-medium text-green-400">Instrucoes atualmente salvas (leitura)</p>
-            </div>
-            <div className="max-h-40 overflow-y-auto">
-              <pre className="text-gray-400 text-xs font-mono whitespace-pre-wrap leading-relaxed">{savedAiInstructions}</pre>
-            </div>
-          </div>
-        )}
-
-        <div>
-          <p className="text-xs text-gray-500 mb-1">Editar instrucoes (substitui o que esta salvo ao clicar em Salvar):</p>
-          <textarea
-            value={aiInstructions}
-            onChange={e => setAiInstructions(e.target.value)}
-            rows={14}
-            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-gray-200 text-sm font-mono resize-y focus:border-purple-500 outline-none"
-          />
-        </div>
+        <textarea
+          value={aiInstructions}
+          onChange={e => setAiInstructions(e.target.value)}
+          rows={18}
+          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-gray-200 text-sm font-mono resize-y focus:border-purple-500 outline-none"
+        />
         <button
           onClick={saveAiInstructions}
           disabled={savingAi}

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   Sparkles, Save, Clock, CheckCircle, Upload, FileText, Image as ImageIcon,
   X, Send, Calendar, ChevronDown, Package, Zap, BookOpen, Star, Target,
-  MessageSquare, Copy, CalendarDays, PlusCircle, LayoutList, Trash2
+  MessageSquare, Copy, CalendarDays, PlusCircle, LayoutList
 } from 'lucide-react';
 import api from '../services/api';
 
@@ -64,8 +64,6 @@ export default function Conteudo() {
   const [batchSelected, setBatchSelected] = useState<string[]>([]);
   const [batchSchedules, setBatchSchedules] = useState<Record<string, string>>({});
   const [schedulingBatch, setSchedulingBatch] = useState(false);
-  const [recurringBase, setRecurringBase] = useState(''); // data/hora base para recorrente
-  const [recurringTime, setRecurringTime] = useState('08:00'); // horario fixo
 
   // Importar post pronto
   const [importContent, setImportContent] = useState('');
@@ -94,35 +92,7 @@ export default function Conteudo() {
   }
 
   async function loadPosts() {
-    try {
-      const { data } = await api.get('/content/posts');
-      // Ordenar: agendados por data (mais próximo primeiro), depois rascunhos, depois publicados
-      const sorted = [...data].sort((a: SavedPost, b: SavedPost) => {
-        const order = (p: SavedPost) => p.status === 'scheduled' ? 0 : p.status === 'draft' ? 1 : 2;
-        if (order(a) !== order(b)) return order(a) - order(b);
-        if (a.status === 'scheduled' && b.status === 'scheduled') {
-          return new Date(a.scheduledAt!).getTime() - new Date(b.scheduledAt!).getTime();
-        }
-        return new Date(b.scheduledAt || 0).getTime() - new Date(a.scheduledAt || 0).getTime();
-      });
-      setPosts(sorted);
-    } catch {}
-  }
-
-  // Aplica agendamento recorrente: distribui selecionados dia a dia a partir da base
-  // Horário de Brasília (UTC-3) convertido para UTC
-  function applyRecurring() {
-    if (!recurringBase) return;
-    const [datePart, timePart] = recurringBase.split('T');
-    const [year, month, day] = datePart.split('-').map(Number);
-    const [hour, minute] = timePart.split(':').map(Number);
-    
-    const updated: Record<string, string> = { ...batchSchedules };
-    batchSelected.forEach((id, idx) => {
-      const d = new Date(Date.UTC(year, month - 1, day + idx, hour + 3, minute));
-      updated[id] = d.toISOString(); // formato ISO UTC
-    });
-    setBatchSchedules(updated);
+    try { const { data } = await api.get('/content/posts'); setPosts(data); } catch {}
   }
 
   async function generate() {
@@ -191,29 +161,11 @@ export default function Conteudo() {
     } catch { alert('Erro ao salvar'); }
   }
 
-  // Converte datetime-local (horário de Brasília UTC-3) para ISO UTC
-  // O usuário digita no horário de Brasília, convertemos para UTC
-  function localToISO(datetimeLocal: string): string {
-    // datetime-local vem como "2026-04-13T20:12" (sem timezone)
-    // Interpretar como horário de Brasília (UTC-3) e converter para UTC
-    const [datePart, timePart] = datetimeLocal.split('T');
-    const [year, month, day] = datePart.split('-').map(Number);
-    const [hour, minute] = timePart.split(':').map(Number);
-    
-    // Criar data em UTC-3 (Brasília) e converter para UTC
-    // Brasília = UTC-3, então adicionamos 3 horas para converter para UTC
-    const utcHour = hour + 3;
-    
-    const d = new Date(Date.UTC(year, month - 1, day, utcHour, minute));
-    return d.toISOString();
-  }
-
   async function publishPost(postId: string, scheduledAt?: string) {
     setPublishing(postId);
     try {
       if (scheduledAt) {
-        const isoDate = localToISO(scheduledAt);
-        await api.patch(`/content/posts/${postId}`, { status: 'scheduled', scheduledAt: isoDate });
+        await api.patch(`/content/posts/${postId}`, { status: 'scheduled', scheduledAt });
         alert('Post agendado com sucesso!');
       } else {
         await api.post('/content/publish', { postId });
@@ -226,15 +178,6 @@ export default function Conteudo() {
       loadPosts();
     } catch (e: any) { alert(e.response?.data?.error || 'Erro ao publicar'); }
     finally { setPublishing(null); }
-  }
-
-  async function cancelSchedule(postId: string) {
-    if (!confirm('Cancelar agendamento e voltar para rascunho?')) return;
-    try {
-      await api.patch(`/content/posts/${postId}`, { status: 'draft', scheduledAt: null });
-      loadPosts();
-      setPublishModal(null);
-    } catch { alert('Erro ao cancelar agendamento'); }
   }
 
   function handleDrop(e: React.DragEvent) {
@@ -270,17 +213,6 @@ export default function Conteudo() {
     await navigator.clipboard.writeText(parts.join('\n\n'));
     setCopiedPostId(post.id);
     setTimeout(() => setCopiedPostId(null), 2000);
-  }
-
-  async function deletePostHandler(postId: string) {
-    if (!confirm('Tem certeza que deseja excluir este post? Esta ação não pode ser desfeita.')) return;
-    try {
-      await api.delete(`/content/posts/${postId}`);
-      loadPosts();
-      alert('Post excluído com sucesso!');
-    } catch {
-      alert('Erro ao excluir post');
-    }
   }
 
   async function confirmBatchSchedule() {
@@ -363,16 +295,21 @@ export default function Conteudo() {
     if (weeklyPosts.length === 0) return;
     setSavingWeekly(true);
     try {
-      for (const p of weeklyPosts) {
+      let saved = 0;
+      for (let i = 0; i < weeklyPosts.length; i++) {
+        const p = weeklyPosts[i];
+        const scheduledAt = weeklySchedules[i];
         await api.post('/content/posts', {
           platform: weeklyPlatform,
           content: p.content,
           cta: p.cta || null,
           hashtags: Array.isArray(p.hashtags) ? p.hashtags.join(' ') : (p.hashtags || null),
-          status: 'draft',
+          status: scheduledAt ? 'scheduled' : 'draft',
+          scheduledAt: scheduledAt || null,
         });
+        saved++;
       }
-      alert(`${weeklyPosts.length} posts salvos como rascunho no Historico! Acesse a aba Historico para agendar ou publicar.`);
+      alert(`${saved} posts salvos no historico${weeklySchedules[0] ? ' e agendados' : ' como rascunhos'}!`);
       setShowWeeklyModal(false);
       setWeeklyPosts([]);
       setWeeklyTopic('');
@@ -434,45 +371,23 @@ export default function Conteudo() {
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-md space-y-5">
             <div className="flex items-center justify-between">
-              <h3 className="text-white font-semibold">
-                {publishModal.post.status === 'scheduled' ? 'Reagendar post' : 'Publicar / Agendar'}
-              </h3>
+              <h3 className="text-white font-semibold">Publicar post</h3>
               <button onClick={() => setPublishModal(null)} className="text-gray-500 hover:text-gray-300"><X size={18} /></button>
             </div>
-            {publishModal.post.status === 'scheduled' && publishModal.post.scheduledAt && (
-              <p className="text-yellow-400 text-xs flex items-center gap-1">
-                <Clock size={12} /> Agendado para: {new Date(publishModal.post.scheduledAt).toLocaleString('pt-BR')}
-              </p>
-            )}
-            <div className="max-h-24 overflow-y-auto bg-gray-800 rounded-lg p-3">
-              <p className="text-gray-400 text-sm">{publishModal.post.content}</p>
-            </div>
+            <p className="text-gray-400 text-sm line-clamp-3">{publishModal.post.content}</p>
             <button onClick={() => publishPost(publishModal.post.id)} disabled={publishing === publishModal.post.id}
               className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white py-3 rounded-xl font-medium">
               <Send size={16} /> {publishing === publishModal.post.id ? 'Publicando...' : 'Publicar agora'}
             </button>
             <div className="border-t border-gray-800 pt-4 space-y-3">
-              <p className="text-sm text-gray-400">
-                {publishModal.post.status === 'scheduled' ? 'Nova data e hora:' : 'Ou agendar para:'}
-              </p>
-              <p className="text-xs text-yellow-500">
-                💡 Digite o horário de Brasília (UTC-3). Ex: 20:00 = 8 da noite no Brasil.
-              </p>
-              <input type="datetime-local"
-                value={scheduleDate || (publishModal.post.scheduledAt ? publishModal.post.scheduledAt.slice(0,16) : '')}
-                onChange={e => setScheduleDate(e.target.value)}
+              <p className="text-sm text-gray-400">Ou agendar para:</p>
+              <input type="datetime-local" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)}
                 className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" />
               <button onClick={() => scheduleDate && publishPost(publishModal.post.id, scheduleDate)}
                 disabled={!scheduleDate || publishing === publishModal.post.id}
                 className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white py-2 rounded-xl text-sm">
-                <Calendar size={14} /> {publishModal.post.status === 'scheduled' ? 'Confirmar reagendamento' : 'Agendar'}
+                <Calendar size={14} /> Agendar
               </button>
-              {publishModal.post.status === 'scheduled' && (
-                <button onClick={() => cancelSchedule(publishModal.post.id)}
-                  className="w-full flex items-center justify-center gap-2 bg-red-900 hover:bg-red-800 text-red-300 py-2 rounded-xl text-sm mt-1">
-                  <X size={14} /> Cancelar agendamento (voltar para rascunho)
-                </button>
-              )}
             </div>
           </div>
         </div>
@@ -528,7 +443,7 @@ export default function Conteudo() {
             {weeklyStep === 'review' && weeklyPosts.length > 0 && (
               <>
                 <p className="text-xs text-gray-500">
-                  Revise cada post. Ao salvar, todos vao para o Historico como rascunho. Depois agende pelo Historico.
+                  Ajuste o dia e horario de cada post. Se deixar em branco, vai salvar como rascunho.
                 </p>
                 <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
                   {weeklyPosts.map((p: any, i: number) => (
@@ -541,10 +456,14 @@ export default function Conteudo() {
                           {p.angle}
                         </span>
                       </div>
-                      <div className="max-h-48 overflow-y-auto bg-gray-900 rounded-lg p-2">
-                        <p className="text-gray-200 text-sm whitespace-pre-wrap">{p.content}</p>
-                      </div>
+                      <p className="text-gray-200 text-sm whitespace-pre-wrap line-clamp-4">{p.content}</p>
                       {p.cta && <p className="text-blue-400 text-xs">CTA: {p.cta}</p>}
+                      <div>
+                        <label className="text-xs text-gray-500 block mb-1">Data e hora de publicacao</label>
+                        <input type="datetime-local" value={weeklySchedules[i] || ''}
+                          onChange={e => setWeeklySchedules(prev => ({ ...prev, [i]: e.target.value }))}
+                          className="w-full bg-gray-900 border border-gray-600 rounded-lg px-2 py-1.5 text-white text-sm" />
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -577,31 +496,12 @@ export default function Conteudo() {
             </div>
             <p className="text-xs text-gray-500">Selecione os posts e defina data/hora individual para cada um.</p>
 
-            {/* Agendamento recorrente */}
-            <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 space-y-3">
-              <p className="text-sm font-medium text-purple-300 flex items-center gap-2">
-                <CalendarDays size={14} /> Agendamento recorrente (1 post por dia)
-              </p>
-              <p className="text-xs text-gray-500">Escolha a data do 1º post — os outros seguem automaticamente (+1 dia cada).</p>
-              <div className="flex gap-2 flex-wrap items-end">
-                <div className="flex-1 min-w-[180px]">
-                  <label className="text-xs text-gray-500 block mb-1">Data e hora do 1º post</label>
-                  <input type="datetime-local" value={recurringBase} onChange={e => setRecurringBase(e.target.value)}
-                    className="w-full bg-gray-900 border border-gray-600 rounded-lg px-2 py-1.5 text-white text-sm" />
-                </div>
-                <button onClick={applyRecurring} disabled={!recurringBase || batchSelected.length === 0}
-                  className="flex items-center gap-1.5 bg-purple-700 hover:bg-purple-600 disabled:opacity-40 text-white text-sm px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap">
-                  <Zap size={13} /> Aplicar a {batchSelected.length} selecionado(s)
-                </button>
-              </div>
-            </div>
-
-            {posts.filter(p => p.status === 'draft' || p.status === 'scheduled').length === 0 && (
-              <p className="text-gray-600 text-sm text-center py-4">Nenhum rascunho ou agendado disponivel.</p>
+            {posts.filter(p => p.status === 'draft').length === 0 && (
+              <p className="text-gray-600 text-sm text-center py-4">Nenhum rascunho disponivel.</p>
             )}
 
             <div className="space-y-3">
-              {posts.filter(p => p.status === 'draft' || p.status === 'scheduled').map(post => (
+              {posts.filter(p => p.status === 'draft').map(post => (
                 <div key={post.id} className={`rounded-xl border p-3 space-y-2 transition-colors ${batchSelected.includes(post.id) ? 'border-purple-500 bg-purple-900/20' : 'border-gray-700 bg-gray-800'}`}>
                   <label className="flex items-start gap-3 cursor-pointer">
                     <input type="checkbox" checked={batchSelected.includes(post.id)}
@@ -609,9 +509,6 @@ export default function Conteudo() {
                       className="mt-1 accent-purple-500" />
                     <div className="flex-1 min-w-0">
                       <span className={`text-xs px-1.5 py-0.5 rounded mr-2 ${post.platform === 'linkedin' ? 'bg-blue-900 text-blue-300' : 'bg-indigo-900 text-indigo-300'}`}>{post.platform}</span>
-                      {post.status === 'scheduled' && post.scheduledAt && (
-                        <span className="text-xs text-yellow-400 mr-2">Agendado: {new Date(post.scheduledAt).toLocaleString('pt-BR')}</span>
-                      )}
                       <span className="text-gray-300 text-sm">{post.content.substring(0, 80)}...</span>
                     </div>
                   </label>
@@ -742,34 +639,19 @@ export default function Conteudo() {
                       <Save size={14} /> Salvar rascunho
                     </button>
                   </div>
-                  {generated.content ? (
-                    <>
-                      <div className="bg-gray-800 rounded-lg p-4 max-h-64 overflow-y-auto">
-                        <p className="text-gray-200 whitespace-pre-wrap text-sm">{generated.content}</p>
-                      </div>
-                      {generated.cta && (
-                        <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-3">
-                          <p className="text-blue-300 text-sm font-medium">CTA: {generated.cta}</p>
-                        </div>
-                      )}
-                      {generated.hashtags && (
-                        <div className="flex flex-wrap gap-2">
-                          {typeof generated.hashtags === 'string' ? (
-                            generated.hashtags.split(' ').filter((h: string) => h.startsWith('#')).map((h: string, i: number) => (
-                              <span key={i} className="bg-gray-800 text-blue-400 text-xs px-2 py-1 rounded">{h}</span>
-                            ))
-                          ) : (
-                            generated.hashtags.map((h: string, i: number) => (
-                              <span key={i} className="bg-gray-800 text-blue-400 text-xs px-2 py-1 rounded">{h}</span>
-                            ))
-                          )}
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <div className="bg-red-900/30 border border-red-700 rounded-lg p-4">
-                      <p className="text-red-300 text-sm">⚠️ Erro na estrutura do post gerado. Tente novamente.</p>
-                      <p className="text-gray-500 text-xs mt-2">Resposta: {JSON.stringify(generated)}</p>
+                  <div className="bg-gray-800 rounded-lg p-4 max-h-64 overflow-y-auto">
+                    <p className="text-gray-200 whitespace-pre-wrap text-sm">{generated.content}</p>
+                  </div>
+                  {generated.cta && (
+                    <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-3">
+                      <p className="text-blue-300 text-sm font-medium">CTA: {generated.cta}</p>
+                    </div>
+                  )}
+                  {generated.hashtags && (
+                    <div className="flex flex-wrap gap-2">
+                      {generated.hashtags.map((h: string, i: number) => (
+                        <span key={i} className="bg-gray-800 text-blue-400 text-xs px-2 py-1 rounded">{h}</span>
+                      ))}
                     </div>
                   )}
                   <div className="border-t border-gray-800 pt-4">
@@ -988,13 +870,9 @@ export default function Conteudo() {
                 {post.status !== 'published' && (
                   <button onClick={() => setPublishModal({ post })}
                     className="flex items-center gap-1.5 bg-green-700 hover:bg-green-600 text-white text-sm px-3 py-1.5 rounded-lg transition-colors">
-                    <Send size={13} /> {post.status === 'scheduled' ? 'Reagendar' : 'Publicar / Agendar'}
+                    <Send size={13} /> Publicar / Agendar
                   </button>
                 )}
-                <button onClick={() => deletePostHandler(post.id)}
-                  className="flex items-center gap-1.5 bg-red-900 hover:bg-red-800 text-red-300 text-sm px-3 py-1.5 rounded-lg transition-colors">
-                  <Trash2 size={13} /> Excluir
-                </button>
               </div>
             </div>
           ))}
