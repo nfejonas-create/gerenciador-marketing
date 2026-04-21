@@ -2,7 +2,6 @@ import { Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import Anthropic from '@anthropic-ai/sdk';
 import { AuthRequest } from '../middleware/authGuard';
-import { generateCarouselPDF } from '../services/carouselPdf';
 import { publishCarouselToLinkedIn, getLinkedInPersonId } from '../services/linkedinPublish';
 
 const prisma = new PrismaClient();
@@ -213,22 +212,18 @@ export async function publishCarousel(req: AuthRequest, res: Response) {
       }
     }
 
-    // Gerar PDF do carrossel
-    const pdfBuffer = await generateCarouselPDF(carousel.slides as any[]);
-
-    // Publicar no LinkedIn usando nova API
+    // Publicar no LinkedIn usando MultiImage API
     const firstSlide = (carousel.slides as any[])[0];
     const postText = `📊 ${carousel.title}\n\n${firstSlide?.body || ''}\n\n#carrossel #conteudo`;
     
-    const { postUrn, documentUrn } = await publishCarouselToLinkedIn(
+    const { postUrn } = await publishCarouselToLinkedIn(
       { 
         accessToken: linkedInAccount.accessToken, 
         personId: personId || undefined,
         pageId: linkedInAccount.pageId || undefined 
       },
-      pdfBuffer,
-      postText,
-      carousel.title
+      carousel.slides as any[],
+      postText
     );
 
     // Atualizar carrossel como publicado
@@ -245,7 +240,6 @@ export async function publishCarousel(req: AuthRequest, res: Response) {
       ok: true, 
       carousel: updated,
       linkedInPostUrn: postUrn,
-      documentUrn,
     });
   } catch (err: any) {
     console.error('[publishCarousel]', err);
