@@ -1,5 +1,22 @@
 import axios from 'axios';
 
+// Interceptor para debugar respostas
+axios.interceptors.response.use(
+  (response) => {
+    console.log('=== LINKEDIN RESPONSE DEBUG ===');
+    console.log('Status:', response.status);
+    console.log('Headers brutos:', JSON.stringify(response.headers, null, 2));
+    console.log('Data:', response.data);
+    return response;
+  },
+  (error) => {
+    console.log('=== LINKEDIN ERROR ===');
+    console.log('Status:', error.response?.status);
+    console.log('Data:', error.response?.data);
+    return Promise.reject(error);
+  }
+);
+
 interface LinkedInAccount {
   accessToken: string;
   personId?: string;
@@ -60,20 +77,11 @@ export async function publishTextPost(
   console.log('[LinkedIn] Response headers:', JSON.stringify(postRes.headers, null, 2));
   console.log('[LinkedIn] Response data:', JSON.stringify(postRes.data, null, 2));
 
-  // Capturar o URN da resposta
-  let postId = '';
-  
-  // Tentar extrair de várias fontes
-  if (postRes.headers['x-restli-id']) {
-    postId = postRes.headers['x-restli-id'];
-  } else if (postRes.headers['x-linkedin-id']) {
-    postId = postRes.headers['x-linkedin-id'];
-  } else if (postRes.data?.id) {
-    postId = postRes.data.id;
-  } else if (typeof postRes.data === 'string') {
-    // Às vezes vem como string direta
-    postId = postRes.data;
-  }
+  // Capturar o URN da resposta (lowercase!)
+  let postId = postRes.headers['x-restli-id'] 
+            || postRes.headers['x-linkedin-id']
+            || postRes.data?.id
+            || '';
   
   console.log('[LinkedIn] Post ID extraído:', postId);
   
