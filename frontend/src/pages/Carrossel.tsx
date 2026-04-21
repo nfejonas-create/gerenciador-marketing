@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Sparkles, Save, Send, Calendar, Clock, ChevronLeft, Image as ImageIcon } from 'lucide-react';
 import api from '../services/api';
+import { publishCarousel } from '../services/linkedinClient';
 import CarouselEditor from '../components/CarouselEditor';
 import { Slide } from '../components/CarouselSlide';
 
@@ -105,23 +106,41 @@ export default function Carrossel() {
     setPublishing(true);
     try {
       console.log('Publicando carrossel:', { title, slidesCount: slides.length });
-      // Primeiro salva
+      
+      // 1. Salvar no backend
       const { data: saved } = await api.post('/content/carousels', {
         title,
         slides,
         status: 'draft',
       });
       console.log('Carrossel salvo:', saved);
-      // Depois publica
-      const pubResponse = await api.post(`/content/carousels/${saved.id}/publish`);
-      console.log('Resposta publicação:', pubResponse.data);
-      alert('Carrossel publicado no LinkedIn!');
-      setSlides([]);
-      setTopic('');
-      setTitle('');
+      
+      // 2. Buscar token do LinkedIn
+      const { data: accounts } = await api.get('/social/accounts');
+      const linkedInAccount = accounts.find((a: any) => a.platform === 'linkedin');
+      if (!linkedInAccount?.accessToken) {
+        alert('Conta LinkedIn não conectada');
+        return;
+      }
+      
+      // 3. Publicar diretamente no LinkedIn (do browser)
+      const result = await publishCarousel(
+        linkedInAccount.accessToken,
+        title,
+        slides
+      );
+      
+      if (result.ok) {
+        alert('Carrossel publicado no LinkedIn! ID: ' + result.postId);
+        setSlides([]);
+        setTopic('');
+        setTitle('');
+      } else {
+        alert('Erro ao publicar no LinkedIn');
+      }
     } catch (err: any) {
       console.error('Erro ao publicar:', err);
-      alert('Erro ao publicar: ' + (err.response?.data?.error || err.message));
+      alert('Erro ao publicar: ' + (err.message || 'Erro desconhecido'));
     } finally {
       setPublishing(false);
     }
