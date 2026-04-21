@@ -32,12 +32,12 @@ export async function fetchGoogleNewsSuggestions(query: string, date: string): P
           return false;
         }
         const publishedAt = dayjs.utc(new Date(raw));
-        return publishedAt.isSameOrAfter(targetDate) && publishedAt.isBefore(nextDay);
+        return (publishedAt.isAfter(targetDate) || publishedAt.isSame(targetDate)) && publishedAt.isBefore(nextDay);
       })
       .map((item: Parser.Item) => ({
         headline: item.title || '',
         url: item.link || '',
-        source: typeof item.source === 'object' ? item.source?.name || 'Google News' : item.source || 'Google News',
+        source: 'Google News',
         publishedAt: item.isoDate || item.pubDate || new Date().toISOString(),
         snippet: item.contentSnippet || item.content || '',
       }));
