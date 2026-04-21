@@ -9,12 +9,14 @@ export interface Slide {
   title: string;
   body: string;
   style: 'cover' | 'content' | 'cta';
+  imageUrl?: string;
 }
 
 interface CarouselEditorProps {
   slides: Slide[];
   onChange: (slides: Slide[]) => void;
   onCopyText?: () => void;
+  onGenerateImage?: (slideIndex: number) => Promise<string>;
 }
 
 let _id = 0;

@@ -1,11 +1,4 @@
-interface Slide {
-  slide: number;
-  emoji: string;
-  title: string;
-  body: string;
-  style: 'cover' | 'content' | 'cta';
-  imageUrl?: string;
-}
+import { Slide } from './CarouselEditor';
 
 interface CarouselSlideProps {
   slide: Slide;
