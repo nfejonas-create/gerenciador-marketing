@@ -71,46 +71,57 @@ export default function Carrossel() {
   };
 
   const handleSave = async (status: 'draft' | 'scheduled' = 'draft') => {
-    if (!title.trim() || slides.length === 0) return;
+    if (!title.trim() || slides.length === 0) {
+      alert('Título ou slides vazios');
+      return;
+    }
     setSaving(true);
     try {
-      await api.post('/content/carousels', {
+      console.log('Salvando carrossel:', { title, slidesCount: slides.length, status });
+      const response = await api.post('/content/carousels', {
         title,
         slides,
         status,
         scheduledAt: status === 'scheduled' && scheduleDate ? scheduleDate : null,
       });
+      console.log('Resposta salvar:', response.data);
       alert(status === 'scheduled' ? 'Carrossel agendado!' : 'Carrossel salvo!');
       setSlides([]);
       setTopic('');
       setTitle('');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Erro ao salvar:', err);
-      alert('Erro ao salvar carrossel.');
+      alert('Erro ao salvar: ' + (err.response?.data?.error || err.message));
     } finally {
       setSaving(false);
     }
   };
 
   const handlePublish = async () => {
-    if (!title.trim() || slides.length === 0) return;
+    if (!title.trim() || slides.length === 0) {
+      alert('Título ou slides vazios');
+      return;
+    }
     setPublishing(true);
     try {
+      console.log('Publicando carrossel:', { title, slidesCount: slides.length });
       // Primeiro salva
       const { data: saved } = await api.post('/content/carousels', {
         title,
         slides,
         status: 'draft',
       });
+      console.log('Carrossel salvo:', saved);
       // Depois publica
-      await api.post(`/content/carousels/${saved.id}/publish`);
+      const pubResponse = await api.post(`/content/carousels/${saved.id}/publish`);
+      console.log('Resposta publicação:', pubResponse.data);
       alert('Carrossel publicado no LinkedIn!');
       setSlides([]);
       setTopic('');
       setTitle('');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Erro ao publicar:', err);
-      alert('Erro ao publicar carrossel.');
+      alert('Erro ao publicar: ' + (err.response?.data?.error || err.message));
     } finally {
       setPublishing(false);
     }
