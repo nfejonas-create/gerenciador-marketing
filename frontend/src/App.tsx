@@ -28,6 +28,7 @@ import Calendario from './pages/Calendario';
 import Configuracoes from './pages/Configuracoes';
 import AuthCallback from './pages/AuthCallback';
 import BaseConhecimento from './pages/BaseConhecimento';
+import ContentGenerator from './pages/ContentGenerator';
 import Layout from './components/Layout';
 import AdminUsers from './pages/admin/Users';
 
@@ -56,6 +57,7 @@ export default function App() {
             <Route path="conteudo" element={<Conteudo />} />
             <Route path="carrossel" element={<Carrossel />} />
             <Route path="base-conhecimento" element={<BaseConhecimento />} />
+            <Route path="gerador-conteudo" element={<ContentGenerator />} />
             <Route path="funil" element={<Funil />} />
             <Route path="calendario" element={<Calendario />} />
             <Route path="configuracoes" element={<Configuracoes />} />

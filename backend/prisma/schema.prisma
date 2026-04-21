@@ -33,6 +33,9 @@ model User {
   products       Product[]
   calendar       ContentCalendar[]
   knowledgeBase  KnowledgeBase[]
+  contentSuggestions ContentSuggestion[]
+  generatedContents  GeneratedContent[]
+  scheduledPosts     ScheduledPost[]
 }
 
 model AdminSession {
@@ -141,4 +144,48 @@ model KnowledgeBase {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ContentSuggestion {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  source      String   // 'google' | 'linkedin'
+  headline    String
+  url         String
+  snippet     String?
+  fetchedAt   DateTime @default(now())
+  usedAt      DateTime?
+  generated   GeneratedContent[]
+  @@index([userId, source, fetchedAt])
+}
+
+model GeneratedContent {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  suggestionId String
+  suggestion  ContentSuggestion @relation(fields: [suggestionId], references: [id])
+  text        String   @db.Text
+  hashtags    String[]
+  template    String   // 'post' | 'carousel' | 'article'
+  status      String   @default("draft")
+  createdAt   DateTime @default(now())
+  scheduled   ScheduledPost[]
+  @@index([userId, status])
+}
+
+model ScheduledPost {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contentId   String
+  content     GeneratedContent @relation(fields: [contentId], references: [id])
+  publishAt   DateTime
+  recurrence  String   @default("none") // none | daily
+  platform    String   @default("linkedin")
+  status      String   @default("scheduled")
+  lastRunAt   DateTime?
+  createdAt   DateTime @default(now())
+  @@index([userId, status, publishAt])
 }

@@ -9,6 +9,7 @@ import metricsRoutes from './routes/metrics';
 import contentRoutes from './routes/content';
 import funnelRoutes from './routes/funnel';
 import knowledgeRoutes from './routes/knowledge';
+import contentGeneratorRoutes, { reloadJobsOnStartup } from './routes/contentGeneratorRoutes';
 import { errorHandler } from './middleware/errorHandler';
 import './services/passport';
 import './services/schedulerService';
@@ -27,6 +28,7 @@ app.use('/admin', adminRoutes);
 app.use('/social', socialRoutes);
 app.use('/metrics', metricsRoutes);
 app.use('/content', contentRoutes);
+app.use('/content-generator', contentGeneratorRoutes);
 app.use('/funnel', funnelRoutes);
 app.use('/knowledge', knowledgeRoutes);
 
@@ -59,5 +61,8 @@ app.post('/setup/make-admin', async (req: any, res: any) => {
 });
 
 app.use(errorHandler);
+
+// Recarregar jobs de agendamento ao iniciar
+reloadJobsOnStartup().catch(err => console.error('[Startup] Erro ao recarregar jobs:', err));
 
 app.listen(PORT, () => console.log(`Backend rodando na porta ${PORT}`));
