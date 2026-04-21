@@ -39,7 +39,7 @@ export async function publishTextPost(
       specificContent: {
         'com.linkedin.ugc.ShareContent': {
           shareCommentary: { text },
-          shareMediaCategory: 'NONE', // texto simples
+          shareMediaCategory: 'NONE',
         },
       },
       visibility: {
@@ -52,13 +52,30 @@ export async function publishTextPost(
         'X-Restli-Protocol-Version': '2.0.0',
         'Content-Type': 'application/json',
       },
+      validateStatus: () => true, // Não lançar erro em status não-2xx
     }
   );
 
-  const postId = postRes.headers['x-restli-id'] || postRes.data?.id || '';
-  console.log('[LinkedIn] Post criado! ID:', postId);
-  console.log('[LinkedIn] Headers:', JSON.stringify(postRes.headers));
-  console.log('[LinkedIn] Data:', JSON.stringify(postRes.data));
+  console.log('[LinkedIn] Response status:', postRes.status);
+  console.log('[LinkedIn] Response headers:', JSON.stringify(postRes.headers, null, 2));
+  console.log('[LinkedIn] Response data:', JSON.stringify(postRes.data, null, 2));
+
+  // Capturar o URN da resposta
+  let postId = '';
+  
+  // Tentar extrair de várias fontes
+  if (postRes.headers['x-restli-id']) {
+    postId = postRes.headers['x-restli-id'];
+  } else if (postRes.headers['x-linkedin-id']) {
+    postId = postRes.headers['x-linkedin-id'];
+  } else if (postRes.data?.id) {
+    postId = postRes.data.id;
+  } else if (typeof postRes.data === 'string') {
+    // Às vezes vem como string direta
+    postId = postRes.data;
+  }
+  
+  console.log('[LinkedIn] Post ID extraído:', postId);
   
   return postId;
 }
