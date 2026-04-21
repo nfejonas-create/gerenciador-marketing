@@ -55,8 +55,10 @@ export async function publishTextPost(
     }
   );
 
-  const postId = postRes.headers['x-restli-id'] || '';
+  const postId = postRes.headers['x-restli-id'] || postRes.data?.id || '';
   console.log('[LinkedIn] Post criado! ID:', postId);
+  console.log('[LinkedIn] Headers:', JSON.stringify(postRes.headers));
+  console.log('[LinkedIn] Data:', JSON.stringify(postRes.data));
   
   return postId;
 }
