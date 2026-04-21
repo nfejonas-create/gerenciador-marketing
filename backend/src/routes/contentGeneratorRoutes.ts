@@ -1,5 +1,5 @@
-import { Router } from 'express';
-import { authGuard } from '../middleware/authGuard';
+import { Router, Response } from 'express';
+import { authGuard, AuthRequest } from '../middleware/authGuard';
 import { PrismaClient } from '@prisma/client';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
@@ -28,7 +28,7 @@ const prisma = new PrismaClient();
 router.use(authGuard);
 
 // GET /content/suggestions?source=google|linkedin&date=YYYY-MM-DD
-router.get('/suggestions', async (req, res) => {
+router.get('/suggestions', async (req: AuthRequest, res: Response) => {
   try {
     const { source = 'google', date } = req.query as { source: 'google' | 'linkedin'; date?: string };
     const targetDate = date || dayjs.utc().subtract(1, 'day').format('YYYY-MM-DD');
@@ -68,7 +68,7 @@ router.get('/suggestions', async (req, res) => {
 });
 
 // POST /content/generate
-router.post('/generate', async (req, res) => {
+router.post('/generate', async (req: AuthRequest, res: Response) => {
   try {
     const { suggestionId, source, template = 'post' } = req.body;
     const userId = req.effectiveUserId!;
@@ -116,7 +116,7 @@ router.post('/generate', async (req, res) => {
 });
 
 // POST /content/schedule
-router.post('/schedule', async (req, res) => {
+router.post('/schedule', async (req: AuthRequest, res: Response) => {
   try {
     const { contentId, publishAt, recurrence = 'none', platform = 'linkedin' } = req.body;
     const userId = req.effectiveUserId!;
@@ -182,7 +182,7 @@ router.post('/schedule', async (req, res) => {
 });
 
 // GET /content/scheduled
-router.get('/scheduled', async (req, res) => {
+router.get('/scheduled', async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.effectiveUserId!;
     
@@ -218,7 +218,7 @@ router.get('/scheduled', async (req, res) => {
 });
 
 // DELETE /content/scheduled/:id
-router.delete('/scheduled/:id', async (req, res) => {
+router.delete('/scheduled/:id', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const userId = req.effectiveUserId!;
@@ -241,7 +241,7 @@ router.delete('/scheduled/:id', async (req, res) => {
 });
 
 // PATCH /content/scheduled/:id (atualizar data)
-router.patch('/scheduled/:id', async (req, res) => {
+router.patch('/scheduled/:id', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { publishAt, recurrence } = req.body;
