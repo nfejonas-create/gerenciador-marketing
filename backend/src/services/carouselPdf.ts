@@ -1,5 +1,6 @@
 import PDFDocument from 'pdfkit';
-import { createCanvas, loadImage } from 'canvas';
+// canvas é importado de forma lazy dentro de generateSlideImages
+// pois usa binários nativos que podem não estar disponíveis em todos os ambientes
 
 interface Slide {
   slide: number;
@@ -74,6 +75,9 @@ export async function generateCarouselPDF(slides: Slide[]): Promise<Buffer> {
 
 // Gerar imagens PNG de cada slide para carrossel LinkedIn
 export async function generateSlideImages(slides: Slide[]): Promise<Buffer[]> {
+  // import lazy — canvas requer binários nativos
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { createCanvas } = require('canvas') as typeof import('canvas');
   const images: Buffer[] = [];
   
   for (const slide of slides) {
