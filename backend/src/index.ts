@@ -85,6 +85,7 @@ app.post('/debug/apply-migration', async (req: any, res: any) => {
     `ALTER TABLE "ContentSuggestion" ADD COLUMN IF NOT EXISTS "userId" TEXT`,
     // Fix ScheduledPost: adicionar colunas novas
     `ALTER TABLE "ScheduledPost" ADD COLUMN IF NOT EXISTS "contentId" TEXT`,
+    `ALTER TABLE "ScheduledPost" ADD COLUMN IF NOT EXISTS "publishAt" TIMESTAMP(3)`,
     `ALTER TABLE "ScheduledPost" ADD COLUMN IF NOT EXISTS "recurrence" TEXT NOT NULL DEFAULT 'none'`,
     `ALTER TABLE "ScheduledPost" ADD COLUMN IF NOT EXISTS "platform" TEXT NOT NULL DEFAULT 'linkedin'`,
     `ALTER TABLE "ScheduledPost" ADD COLUMN IF NOT EXISTS "lastRunAt" TIMESTAMP(3)`,
