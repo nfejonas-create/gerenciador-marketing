@@ -127,6 +127,29 @@ app.post('/debug/apply-migration', async (req: any, res: any) => {
   } finally { await p.$disconnect(); }
 });
 
+// Endpoint temporário - inserir suggestion de teste
+app.post('/debug/seed-suggestion', async (req: any, res: any) => {
+  const { secret } = req.body || {};
+  if (secret !== (process.env.SETUP_SECRET || 'setup-secret-2026')) return res.status(403).json({ error: 'Acesso negado' });
+  const { PrismaClient } = require('@prisma/client');
+  const p = new PrismaClient();
+  try {
+    const users = await p.$queryRaw`SELECT id FROM "User" LIMIT 1` as any[];
+    if (!users.length) return res.status(404).json({ error: 'Nenhum usuário encontrado' });
+    const userId = users[0].id;
+    const id = 'test-suggestion-' + Date.now();
+    await p.$executeRawUnsafe(
+      `INSERT INTO "ContentSuggestion" (id, "userId", source, headline, url, snippet, "fetchedAt") VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+      id, userId, 'google',
+      'NBR 5410: nova norma de instalações elétricas residenciais 2026',
+      'https://example.com/nbr5410-2026',
+      'Atualização da norma NBR 5410 traz novas exigências para eletricistas em 2026.'
+    );
+    res.json({ id, userId });
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+  finally { await p.$disconnect(); }
+});
+
 // Endpoint temporário - define senha para conta OAuth
 app.post('/setup/set-password', async (req: any, res: any) => {
   const { email, password, secret } = req.body;
