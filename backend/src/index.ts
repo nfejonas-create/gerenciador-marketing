@@ -34,6 +34,20 @@ app.use('/knowledge', knowledgeRoutes);
 
 app.get('/health', (_req, res) => res.json({ status: 'ok', serverTime: new Date().toISOString() }));
 
+// Diagnóstico temporário - verificar banco de dados no Render
+app.get('/debug/db', async (_req, res) => {
+  const { PrismaClient } = require('@prisma/client');
+  const p = new PrismaClient();
+  try {
+    const tables = await p.$queryRaw`SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename`;
+    const dbUrl = (process.env.DATABASE_URL || '').replace(/:[^@]+@/, ':***@');
+    const rawTest = await p.$queryRaw`SELECT COUNT(*)::int as count FROM "ContentSuggestion"`.catch((e: any) => ({ rawError: e.message }));
+    res.json({ tables, dbHost: dbUrl.split('@')[1]?.split('/')[0], rawTest });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  } finally { await p.$disconnect(); }
+});
+
 // Endpoint temporário - define senha para conta OAuth
 app.post('/setup/set-password', async (req: any, res: any) => {
   const { email, password, secret } = req.body;
