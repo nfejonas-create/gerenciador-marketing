@@ -83,6 +83,17 @@ app.post('/debug/apply-migration', async (req: any, res: any) => {
     `CREATE INDEX IF NOT EXISTS "ContentSuggestion_userId_source_fetchedAt_idx" ON "ContentSuggestion"("userId", "source", "fetchedAt")`,
     `CREATE INDEX IF NOT EXISTS "GeneratedContent_userId_status_idx" ON "GeneratedContent"("userId", "status")`,
     `ALTER TABLE "ContentSuggestion" ADD COLUMN IF NOT EXISTS "userId" TEXT`,
+    // Fix ScheduledPost: adicionar colunas novas
+    `ALTER TABLE "ScheduledPost" ADD COLUMN IF NOT EXISTS "contentId" TEXT`,
+    `ALTER TABLE "ScheduledPost" ADD COLUMN IF NOT EXISTS "recurrence" TEXT NOT NULL DEFAULT 'none'`,
+    `ALTER TABLE "ScheduledPost" ADD COLUMN IF NOT EXISTS "platform" TEXT NOT NULL DEFAULT 'linkedin'`,
+    `ALTER TABLE "ScheduledPost" ADD COLUMN IF NOT EXISTS "lastRunAt" TIMESTAMP(3)`,
+    `CREATE INDEX IF NOT EXISTS "ScheduledPost_userId_status_publishAt_idx" ON "ScheduledPost"("userId", "status", "publishAt")`,
+    `DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ScheduledPost_contentId_fkey') THEN
+        ALTER TABLE "ScheduledPost" ADD CONSTRAINT "ScheduledPost_contentId_fkey" FOREIGN KEY ("contentId") REFERENCES "GeneratedContent"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+      END IF;
+    END $$`,
     `DO $$ BEGIN
       IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ContentSuggestion_userId_fkey') THEN
         ALTER TABLE "ContentSuggestion" ADD CONSTRAINT "ContentSuggestion_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
