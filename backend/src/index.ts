@@ -48,6 +48,73 @@ app.get('/debug/db', async (_req, res) => {
   } finally { await p.$disconnect(); }
 });
 
+// Endpoint temporário - aplicar migration ContentSuggestion/GeneratedContent no banco correto
+app.post('/debug/apply-migration', async (req: any, res: any) => {
+  const { secret } = req.body || {};
+  if (secret !== (process.env.SETUP_SECRET || 'setup-secret-2026')) {
+    return res.status(403).json({ error: 'Acesso negado' });
+  }
+  const { PrismaClient } = require('@prisma/client');
+  const p = new PrismaClient();
+  const results: any[] = [];
+  const sqls = [
+    `CREATE TABLE IF NOT EXISTS "ContentSuggestion" (
+      "id" TEXT NOT NULL,
+      "userId" TEXT NOT NULL,
+      "source" TEXT NOT NULL,
+      "headline" TEXT NOT NULL,
+      "url" TEXT NOT NULL,
+      "snippet" TEXT,
+      "fetchedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "usedAt" TIMESTAMP(3),
+      CONSTRAINT "ContentSuggestion_pkey" PRIMARY KEY ("id")
+    )`,
+    `CREATE TABLE IF NOT EXISTS "GeneratedContent" (
+      "id" TEXT NOT NULL,
+      "userId" TEXT NOT NULL,
+      "suggestionId" TEXT NOT NULL,
+      "text" TEXT NOT NULL,
+      "hashtags" TEXT[],
+      "template" TEXT NOT NULL,
+      "status" TEXT NOT NULL DEFAULT 'draft',
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "GeneratedContent_pkey" PRIMARY KEY ("id")
+    )`,
+    `CREATE INDEX IF NOT EXISTS "ContentSuggestion_userId_source_fetchedAt_idx" ON "ContentSuggestion"("userId", "source", "fetchedAt")`,
+    `CREATE INDEX IF NOT EXISTS "GeneratedContent_userId_status_idx" ON "GeneratedContent"("userId", "status")`,
+    `ALTER TABLE "ContentSuggestion" ADD COLUMN IF NOT EXISTS "userId" TEXT`,
+    `DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ContentSuggestion_userId_fkey') THEN
+        ALTER TABLE "ContentSuggestion" ADD CONSTRAINT "ContentSuggestion_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+      END IF;
+    END $$`,
+    `DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'GeneratedContent_userId_fkey') THEN
+        ALTER TABLE "GeneratedContent" ADD CONSTRAINT "GeneratedContent_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+      END IF;
+    END $$`,
+    `DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'GeneratedContent_suggestionId_fkey') THEN
+        ALTER TABLE "GeneratedContent" ADD CONSTRAINT "GeneratedContent_suggestionId_fkey" FOREIGN KEY ("suggestionId") REFERENCES "ContentSuggestion"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+      END IF;
+    END $$`,
+  ];
+  try {
+    for (const sql of sqls) {
+      try {
+        await p.$executeRawUnsafe(sql);
+        results.push({ ok: true, sql: sql.trim().substring(0, 60) });
+      } catch (e: any) {
+        results.push({ ok: false, sql: sql.trim().substring(0, 60), error: e.message });
+      }
+    }
+    const tables = await p.$queryRaw`SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename`;
+    return res.json({ results, tables });
+  } catch (e: any) {
+    return res.status(500).json({ error: e.message, results });
+  } finally { await p.$disconnect(); }
+});
+
 // Endpoint temporário - define senha para conta OAuth
 app.post('/setup/set-password', async (req: any, res: any) => {
   const { email, password, secret } = req.body;
