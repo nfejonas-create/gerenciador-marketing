@@ -136,7 +136,7 @@ app.post('/debug/seed-suggestion', async (req: any, res: any) => {
   try {
     const users = await p.$queryRaw`SELECT id FROM "User" LIMIT 1` as any[];
     if (!users.length) return res.status(404).json({ error: 'Nenhum usuário encontrado' });
-    const userId = users[0].id;
+    const userId = (req.body && req.body.userId) || users[0].id;
     const id = 'test-suggestion-' + Date.now();
     await p.$executeRawUnsafe(
       `INSERT INTO "ContentSuggestion" (id, "userId", source, headline, url, snippet, "fetchedAt") VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
