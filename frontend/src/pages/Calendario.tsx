@@ -36,16 +36,35 @@ function fmtTime(dateStr: string): string {
   });
 }
 
-/** Retorna o bucket: negativo = futuro, 1..4 = semanas passadas, 5 = mais antigo */
-function getBucket(dateStr: string): number {
-  const now = new Date();
-  const date = new Date(dateStr);
-  const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-  if (diffDays < 0) return 0;   // futuro
-  if (diffDays < 7) return 1;
-  if (diffDays < 14) return 2;
-  if (diffDays < 21) return 3;
-  return 4;
+// Retorna chave única do dia: "2026-04-22"
+function getDayKey(dateStr: string): string {
+  return new Date(dateStr).toISOString().slice(0, 10);
+}
+
+// Label do cabeçalho do grupo: "Ter., 22/04/2026"
+function fmtDayHeader(dayKey: string): string {
+  return new Date(dayKey + 'T12:00:00').toLocaleDateString('pt-BR', {
+    weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric',
+  });
+}
+
+// Retorna label relativo: Hoje, Ontem, Amanha, ou data formatada
+function getDayRelativeLabel(dayKey: string): string {
+  const today = new Date();
+  const todayKey = today.toISOString().slice(0, 10);
+  
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayKey = yesterday.toISOString().slice(0, 10);
+  
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowKey = tomorrow.toISOString().slice(0, 10);
+  
+  if (dayKey === todayKey) return 'Hoje';
+  if (dayKey === yesterdayKey) return 'Ontem';
+  if (dayKey === tomorrowKey) return 'Amanha';
+  return fmtDayHeader(dayKey);
 }
 
 export default function Calendario() {
@@ -61,40 +80,40 @@ export default function Calendario() {
       .finally(() => setLoading(false));
   }, []);
 
-  const filtered = posts
-    .filter(p => {
-      const platOk = filterPlatform === 'all' || p.platform === filterPlatform;
-      const statOk = filterStatus === 'all' || p.status === filterStatus;
-      return platOk && statOk;
-    })
-    // Ordenar globalmente: mais recente primeiro
-    .sort((a, b) => getRefDate(b).getTime() - getRefDate(a).getTime());
-
-  // Agrupar: bucket 0 = próximas semanas (agendados futuros), 1..4 = passado
-  const buckets: Record<number, Post[]> = { 0: [], 1: [], 2: [], 3: [], 4: [] };
-  filtered.forEach(p => {
-    const ref = p.publishedAt || p.scheduledAt || p.createdAt;
-    const b = getBucket(ref);
-    buckets[b].push(p);
+  const filtered = posts.filter(p => {
+    const platOk = filterPlatform === 'all' || p.platform === filterPlatform;
+    const statOk = filterStatus === 'all' || p.status === filterStatus;
+    return platOk && statOk;
   });
 
-  // Bucket 0 (futuro) ordena crescente (mais próximo primeiro)
-  buckets[0].sort((a, b) => getRefDate(a).getTime() - getRefDate(b).getTime());
+  // 1. Ordenar todos os posts: mais recente primeiro
+  const sorted = [...filtered].sort((a, b) =>
+    getRefDate(b).getTime() - getRefDate(a).getTime()
+  );
 
-  const bucketConfig = [
-    { key: 0, label: 'Proximas publicacoes', icon: '📅', color: 'border-blue-800 bg-blue-900/10', future: true },
-    { key: 1, label: 'Semana atual', icon: '📆', color: 'border-gray-700 bg-gray-900', future: false },
-    { key: 2, label: 'Semana passada', icon: '🗓️', color: 'border-gray-700 bg-gray-900', future: false },
-    { key: 3, label: 'Ha 2 semanas', icon: '🗓️', color: 'border-gray-700 bg-gray-900', future: false },
-    { key: 4, label: 'Ha 3+ semanas', icon: '🗓️', color: 'border-gray-700 bg-gray-900', future: false },
-  ];
+  // 2. Agrupar por dia
+  const byDay = new Map<string, Post[]>();
+  sorted.forEach(p => {
+    const ref = p.publishedAt || p.scheduledAt || p.createdAt;
+    const key = getDayKey(ref);
+    if (!byDay.has(key)) byDay.set(key, []);
+    byDay.get(key)!.push(p);
+  });
+
+  // 3. Dentro de cada dia, ordenar por horário crescente
+  byDay.forEach(dayPosts => dayPosts.sort((a, b) =>
+    getRefDate(a).getTime() - getRefDate(b).getTime()
+  ));
+
+  // 4. Dias ordenados do mais recente ao mais antigo
+  const days = [...byDay.keys()].sort((a, b) => b.localeCompare(a));
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-white">Calendario</h1>
-          <p className="text-gray-400 text-sm">Historico e agendamentos — do mais recente ao mais antigo</p>
+          <p className="text-gray-400 text-sm">Posts por dia — do mais recente ao mais antigo</p>
         </div>
         <div className="flex gap-2 flex-wrap">
           <select value={filterPlatform} onChange={e => setFilterPlatform(e.target.value)}
@@ -127,18 +146,22 @@ export default function Calendario() {
         </div>
       )}
 
-      {bucketConfig.map(({ key, label, icon, color, future }) => {
-        const bPosts = buckets[key];
-        if (bPosts.length === 0) return null;
+      {days.map(dayKey => {
+        const dayPosts = byDay.get(dayKey)!;
+        const label = getDayRelativeLabel(dayKey);
+        const isToday = label === 'Hoje';
+        const isFuture = new Date(dayKey) > new Date();
+        
         return (
-          <div key={key} className={`border rounded-xl p-6 ${color}`}>
+          <div key={dayKey} className={`border rounded-xl p-6 ${isToday ? 'border-blue-700 bg-blue-900/10' : isFuture ? 'border-purple-700 bg-purple-900/10' : 'border-gray-700 bg-gray-900'}`}>
             <h2 className="font-semibold text-white mb-4 flex items-center gap-2">
-              <CalendarDays size={16} className={future ? 'text-blue-400' : 'text-gray-400'} />
-              <span>{icon} {label}</span>
-              <span className="ml-auto text-xs text-gray-500">{bPosts.length} post{bPosts.length !== 1 ? 's' : ''}</span>
+              <CalendarDays size={16} className={isToday ? 'text-blue-400' : isFuture ? 'text-purple-400' : 'text-gray-400'} />
+              <span>📅 {label}</span>
+              <span className="text-xs text-gray-500 ml-2">{fmtDayHeader(dayKey)}</span>
+              <span className="ml-auto text-xs text-gray-600">{dayPosts.length} post{dayPosts.length !== 1 ? 's' : ''}</span>
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {bPosts.map(post => {
+              {dayPosts.map(post => {
                 const ref = post.publishedAt || post.scheduledAt || post.createdAt;
                 const isPublished = post.status === 'published';
                 const isScheduled = post.status === 'scheduled';
