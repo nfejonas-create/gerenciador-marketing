@@ -30,7 +30,7 @@ async function extractTextFromFile(buffer: Buffer, mimetype: string): Promise<st
 
   if (mimetype.startsWith('image/')) {
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-3-5-sonnet-20241022',
       max_tokens: 1000,
       messages: [{
         role: 'user',
@@ -210,7 +210,7 @@ Retorne SOMENTE JSON valido:
 }`;
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-3-5-sonnet-20241022',
       max_tokens: 1000,
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
@@ -231,7 +231,7 @@ export async function analyzeContent(req: AuthRequest, res: Response) {
     const { content, platform = 'linkedin' } = req.body;
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-3-5-sonnet-20241022',
       max_tokens: 1000,
       messages: [{
         role: 'user',
@@ -268,7 +268,7 @@ export async function generateCalendar(req: AuthRequest, res: Response) {
     });
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-3-5-sonnet-20241022',
       max_tokens: 2000,
       messages: [{
         role: 'user',
@@ -297,7 +297,7 @@ export async function analyzeMaterial(req: AuthRequest, res: Response) {
   try {
     const { text, title } = req.body;
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-3-5-sonnet-20241022',
       max_tokens: 1500,
       messages: [{
         role: 'user',
@@ -467,7 +467,7 @@ Retorne SOMENTE JSON valido:
 }`;
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-3-5-sonnet-20241022',
       max_tokens: 6000,
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
@@ -499,7 +499,7 @@ export async function uploadAndGeneratePosts(req: AuthRequest, res: Response) {
     const template = TEMPLATES[platform as 'linkedin' | 'facebook'] || TEMPLATES.linkedin;
 
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-3-5-sonnet-20241022',
       max_tokens: 4000,
       system: `Voce e assistente do Manual do Eletricista. Jonas e eletricista industrial desde 1997. Tom: direto, linguagem de obra.`,
       messages: [{
