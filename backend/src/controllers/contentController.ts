@@ -385,6 +385,7 @@ export async function getPosts(req: AuthRequest, res: Response) {
 export async function savePost(req: AuthRequest, res: Response) {
   try {
     const { platform, content, cta, hashtags, scheduledAt, status, imageUrl } = req.body;
+    const finalStatus = status || 'draft';
     const post = await prisma.post.create({
       data: {
         userId: req.effectiveUserId!,
@@ -392,8 +393,8 @@ export async function savePost(req: AuthRequest, res: Response) {
         content,
         cta,
         hashtags: Array.isArray(hashtags) ? hashtags.join(' ') : hashtags,
-        status: status || 'draft',
-        scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
+        status: finalStatus,
+        scheduledAt: finalStatus === 'scheduled' && scheduledAt ? new Date(scheduledAt) : null,
         imageUrl: imageUrl || null,
       },
     });
@@ -412,18 +413,21 @@ export async function savePostsBatch(req: AuthRequest, res: Response) {
 
     const created = await prisma.$transaction(
       posts.map((item: any) =>
-        prisma.post.create({
-          data: {
-            userId: req.effectiveUserId!,
-            platform: item.platform,
-            content: item.content,
-            cta: item.cta || null,
-            hashtags: Array.isArray(item.hashtags) ? item.hashtags.join(' ') : (item.hashtags || null),
-            status: item.status || 'draft',
-            scheduledAt: item.scheduledAt ? new Date(item.scheduledAt) : null,
-            imageUrl: item.imageUrl || null,
-          },
-        })
+        {
+          const finalStatus = item.status || 'draft';
+          return prisma.post.create({
+            data: {
+              userId: req.effectiveUserId!,
+              platform: item.platform,
+              content: item.content,
+              cta: item.cta || null,
+              hashtags: Array.isArray(item.hashtags) ? item.hashtags.join(' ') : (item.hashtags || null),
+              status: finalStatus,
+              scheduledAt: finalStatus === 'scheduled' && item.scheduledAt ? new Date(item.scheduledAt) : null,
+              imageUrl: item.imageUrl || null,
+            },
+          });
+        }
       )
     );
 
@@ -441,7 +445,8 @@ export async function updatePost(req: AuthRequest, res: Response) {
       where: { id, userId: req.effectiveUserId! },
       data: {
         ...(status && { status }),
-        ...(scheduledAt && { scheduledAt: new Date(scheduledAt) }),
+        ...(status === 'draft' ? { scheduledAt: null } : {}),
+        ...(scheduledAt ? { scheduledAt: new Date(scheduledAt) } : {}),
         ...(imageUrl && { imageUrl }),
       },
     });

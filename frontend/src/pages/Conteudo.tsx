@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import {
   Sparkles, Save, Clock, CheckCircle, Upload, FileText, Image as ImageIcon,
   X, Send, Calendar, ChevronDown, Package, Zap, BookOpen, Star, Target,
@@ -18,7 +18,7 @@ interface Product { id: string; name: string; url?: string; type?: string; price
 interface SavedPost { id: string; platform: string; status: string; content: string; cta?: string; hashtags?: string; scheduledAt?: string; publishedAt?: string; createdAt?: string; imageUrl?: string; }
 
 function fmtDate(iso?: string) {
-  if (!iso) return '—';
+  if (!iso) return 'â€”';
   return new Date(iso).toLocaleString('pt-BR', {
     day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
@@ -26,7 +26,7 @@ function fmtDate(iso?: string) {
 }
 
 
-// PublishModal externo — tipo estavel, sem closure do Conteudo
+// PublishModal externo â€” tipo estavel, sem closure do Conteudo
 function PublishModal({ postId, publishing, onPublish, onClose }: { postId: string; publishing: string | null; onPublish: (id: string, scheduledAt?: string) => void; onClose: () => void; }) {
   const [localDate, setLocalDate] = useState("");
   return (
@@ -298,7 +298,7 @@ export default function Conteudo() {
       await api.post('/content/posts/schedule-batch', { items });
       const endDate = new Date(startDate);
       endDate.setDate(endDate.getDate() + recurringSelected.length - 1);
-      alert(`${items.length} post(s) agendado(s)!\nInício: ${fmtDate(items[0].scheduledAt)}\nFim: ${fmtDate(items[items.length - 1].scheduledAt)}`);
+      alert(`${items.length} post(s) agendado(s)!\nInÃ­cio: ${fmtDate(items[0].scheduledAt)}\nFim: ${fmtDate(items[items.length - 1].scheduledAt)}`);
       setShowRecurringModal(false);
       setRecurringSelected([]);
       setRecurringStart('');
@@ -340,7 +340,7 @@ export default function Conteudo() {
         return;
       }
       setWeeklyPosts(data.posts);
-      // Pre-preenche horários sugeridos com datas da próxima semana
+      // Pre-preenche horÃ¡rios sugeridos com datas da prÃ³xima semana
       const schedules: Record<number, string> = {};
       const today = new Date();
       const dayMap: Record<string, number> = {
@@ -351,7 +351,7 @@ export default function Conteudo() {
         const targetDay = dayMap[p.day] ?? i;
         const d = new Date(today);
         let diff = (targetDay - today.getDay() + 7) % 7;
-        // Se diff for 0 e não for hoje, vai para próxima semana
+        // Se diff for 0 e nÃ£o for hoje, vai para prÃ³xima semana
         if (diff === 0 && targetDay !== today.getDay()) {
           diff = 7;
         }
@@ -370,7 +370,7 @@ export default function Conteudo() {
     }
   }
 
-  async function saveWeeklyPosts() {
+  async function saveWeeklyPosts(mode: 'draft' | 'scheduled' = 'scheduled') {
     if (weeklyPosts.length === 0) return;
     setSavingWeekly(true);
     try {
@@ -379,13 +379,19 @@ export default function Conteudo() {
         content: p.content,
         cta: p.cta || null,
         hashtags: Array.isArray(p.hashtags) ? p.hashtags.join(' ') : (p.hashtags || null),
-        status: weeklySchedules[i] ? 'scheduled' : 'draft',
-        scheduledAt: weeklySchedules[i] || null,
+        status: mode === 'scheduled' && weeklySchedules[i] ? 'scheduled' : 'draft',
+        scheduledAt: mode === 'scheduled' && weeklySchedules[i]
+          ? new Date(weeklySchedules[i]).toISOString()
+          : null,
       }));
 
       const { data } = await api.post('/content/posts/batch', { posts: payload });
       const saved = data?.count || payload.length;
-      alert(`${saved} posts salvos no historico${weeklySchedules[0] ? ' e agendados' : ' como rascunhos'}!`);
+      alert(
+        mode === 'scheduled'
+          ? `${saved} posts salvos no historico e agendados!`
+          : `${saved} posts salvos no historico como rascunhos!`
+      );
       setShowWeeklyModal(false);
       setWeeklyPosts([]);
       setWeeklyTopic('');
@@ -402,14 +408,14 @@ export default function Conteudo() {
     }
   }
 
-  // Lógica de filtro para posts
+  // LÃ³gica de filtro para posts
   const filteredPosts = posts.filter(p => {
     const statusOk = filterStatus === 'all' || p.status === filterStatus;
     const platOk = filterPlatform === 'all' || p.platform === filterPlatform;
     return statusOk && platOk;
   });
 
-  // ─── RENDER ─────────────────────────────────────────────────────────────────
+  // â”€â”€â”€ RENDER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   return (
     <div className="space-y-6">
@@ -445,14 +451,14 @@ export default function Conteudo() {
         </div>
       )}
 
-      {/* ── MODAL GERADOR SEMANAL ── */}
+      {/* â”€â”€ MODAL GERADOR SEMANAL â”€â”€ */}
       {showWeeklyModal && (
         <div className="fixed inset-0 bg-black/80 flex items-start justify-center z-50 p-4 overflow-y-auto">
           <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-2xl space-y-5 my-4">
             <div className="flex items-center justify-between">
               <h3 className="text-white font-semibold text-lg flex items-center gap-2">
                 <LayoutList size={18} className="text-blue-400" />
-                {weeklyStep === 'config' ? 'Gerar semana de posts' : `${weeklyPosts.length} posts gerados — revise e agende`}
+                {weeklyStep === 'config' ? 'Gerar semana de posts' : `${weeklyPosts.length} posts gerados â€” revise e agende`}
               </h3>
               <button onClick={() => { setShowWeeklyModal(false); setWeeklyStep('config'); setWeeklyPosts([]); }}
                 className="text-gray-500 hover:text-gray-300"><X size={18} /></button>
@@ -464,7 +470,7 @@ export default function Conteudo() {
                   <label className="text-sm text-gray-400 block mb-1">Tema da semana *</label>
                   <textarea value={weeklyTopic} onChange={e => setWeeklyTopic(e.target.value)} rows={3}
                     className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white resize-none text-sm"
-                    placeholder="Ex: Instalação de inversores de frequência para bombas industriais" />
+                    placeholder="Ex: InstalaÃ§Ã£o de inversores de frequÃªncia para bombas industriais" />
                 </div>
                 <div>
                   <label className="text-sm text-gray-400 block mb-1">Plataforma</label>
@@ -524,10 +530,15 @@ export default function Conteudo() {
                     className="flex-1 bg-gray-700 hover:bg-gray-600 text-gray-300 py-2.5 rounded-xl text-sm transition-colors">
                     Voltar e regerar
                   </button>
-                  <button onClick={saveWeeklyPosts} disabled={savingWeekly}
+                  <button onClick={() => saveWeeklyPosts('draft')} disabled={savingWeekly}
+                    className="flex-1 flex items-center justify-center gap-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white py-2.5 rounded-xl font-medium text-sm transition-colors">
+                    <Save size={14} />
+                    {savingWeekly ? 'Salvando...' : 'Salvar como rascunho'}
+                  </button>
+                  <button onClick={() => saveWeeklyPosts('scheduled')} disabled={savingWeekly}
                     className="flex-1 flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white py-2.5 rounded-xl font-medium text-sm transition-colors">
                     <Save size={14} />
-                    {savingWeekly ? 'Salvando...' : `Salvar ${weeklyPosts.length} posts`}
+                    {savingWeekly ? 'Salvando...' : `Salvar e agendar ${weeklyPosts.length}`}
                   </button>
                 </div>
               </>
@@ -536,7 +547,7 @@ export default function Conteudo() {
         </div>
       )}
 
-      {/* ── MODAL AGENDAMENTO RECORRENTE ── */}
+      {/* â”€â”€ MODAL AGENDAMENTO RECORRENTE â”€â”€ */}
       {showRecurringModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-lg space-y-4 max-h-[85vh] overflow-y-auto">
@@ -547,16 +558,16 @@ export default function Conteudo() {
               <button onClick={() => setShowRecurringModal(false)} className="text-gray-500 hover:text-gray-300"><X size={18} /></button>
             </div>
             <p className="text-xs text-gray-500">
-              Selecione os posts e defina a data/hora inicial. Cada post será agendado 1 dia após o anterior, no mesmo horário.
+              Selecione os posts e defina a data/hora inicial. Cada post serÃ¡ agendado 1 dia apÃ³s o anterior, no mesmo horÃ¡rio.
             </p>
 
             {/* Data inicial */}
             <div>
-              <label className="text-sm text-gray-400 block mb-1">Data e hora do 1º post *</label>
+              <label className="text-sm text-gray-400 block mb-1">Data e hora do 1Âº post *</label>
               <input type="datetime-local" value={recurringStart}
                 onChange={e => setRecurringStart(e.target.value)}
                 className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" />
-              <p className="text-xs text-yellow-500 mt-1">Horário de Brasília (UTC-3)</p>
+              <p className="text-xs text-yellow-500 mt-1">HorÃ¡rio de BrasÃ­lia (UTC-3)</p>
             </div>
 
             {/* Preview das datas */}
@@ -580,9 +591,9 @@ export default function Conteudo() {
 
             {/* Lista de posts */}
             <div>
-              <label className="text-sm text-gray-400 block mb-2">Selecione os posts (na ordem de publicação)</label>
+              <label className="text-sm text-gray-400 block mb-2">Selecione os posts (na ordem de publicaÃ§Ã£o)</label>
               {posts.filter(p => p.status === 'draft').length === 0 && (
-                <p className="text-gray-600 text-sm text-center py-4">Nenhum rascunho disponível.</p>
+                <p className="text-gray-600 text-sm text-center py-4">Nenhum rascunho disponÃ­vel.</p>
               )}
               <div className="space-y-2 max-h-48 overflow-y-auto">
                 {posts.filter(p => p.status === 'draft').map(post => {
@@ -612,13 +623,13 @@ export default function Conteudo() {
             <button onClick={confirmRecurring} disabled={schedulingRecurring || recurringSelected.length === 0 || !recurringStart}
               className="w-full flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white py-3 rounded-xl font-medium transition-colors">
               <CalendarDays size={16} />
-              {schedulingRecurring ? 'Agendando...' : `Agendar ${recurringSelected.length} post(s) — 1/dia`}
+              {schedulingRecurring ? 'Agendando...' : `Agendar ${recurringSelected.length} post(s) â€” 1/dia`}
             </button>
           </div>
         </div>
       )}
 
-      {/* ── MODAL AGENDAR EM LOTE (per-post datetime) ── */}
+      {/* â”€â”€ MODAL AGENDAR EM LOTE (per-post datetime) â”€â”€ */}
       {showBatchModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-lg space-y-4 max-h-[85vh] overflow-y-auto">
@@ -679,7 +690,7 @@ export default function Conteudo() {
         ))}
       </div>
 
-      {/* ── ABA: GERAR POST ── */}
+      {/* â”€â”€ ABA: GERAR POST â”€â”€ */}
       {tab === 'generate' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-5">
@@ -790,7 +801,7 @@ export default function Conteudo() {
                   )}
                   <div className="border-t border-gray-800 pt-4">
                     <p className="text-xs text-gray-500 mb-3 flex items-center gap-1">
-                      <ImageIcon size={12} /> Gerar prompt para imagem — copie e use no Midjourney, DALL-E ou Leonardo
+                      <ImageIcon size={12} /> Gerar prompt para imagem â€” copie e use no Midjourney, DALL-E ou Leonardo
                     </p>
                     <div className="flex gap-2 flex-wrap mb-3">
                       {IMAGE_STYLES.map(s => (
@@ -806,7 +817,7 @@ export default function Conteudo() {
                         <p className="text-gray-300 text-xs leading-relaxed">{imagePrompt}</p>
                         <button onClick={copyPrompt}
                           className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg transition-colors ${promptCopied ? 'bg-green-700 text-green-200' : 'bg-gray-700 hover:bg-gray-600 text-gray-300'}`}>
-                          {promptCopied ? '✓ Copiado!' : 'Copiar prompt'}
+                          {promptCopied ? 'âœ“ Copiado!' : 'Copiar prompt'}
                         </button>
                       </div>
                     )}
@@ -818,7 +829,7 @@ export default function Conteudo() {
         </div>
       )}
 
-      {/* ── ABA: UPLOAD DE MATERIAL ── */}
+      {/* â”€â”€ ABA: UPLOAD DE MATERIAL â”€â”€ */}
       {tab === 'upload' && (
         <div className="space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -858,7 +869,7 @@ export default function Conteudo() {
               <div>
                 <Upload size={40} className="mx-auto text-gray-600 mb-3" />
                 <p className="text-gray-300 font-medium">Arraste ou clique para selecionar</p>
-                <p className="text-gray-500 text-sm mt-1">PDF, PNG, JPG, TXT — ate 20MB</p>
+                <p className="text-gray-500 text-sm mt-1">PDF, PNG, JPG, TXT â€” ate 20MB</p>
               </div>
             )}
           </div>
@@ -939,7 +950,7 @@ export default function Conteudo() {
         </div>
       )}
 
-      {/* ── ABA: ANALISAR TEXTO ── */}
+      {/* â”€â”€ ABA: ANALISAR TEXTO â”€â”€ */}
       {tab === 'analyze' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-4">
@@ -958,15 +969,15 @@ export default function Conteudo() {
                 <span className="text-3xl font-bold text-white">{analysis.score}/10</span>
                 <span className="text-gray-400 text-sm">Score de qualidade</span>
               </div>
-              {analysis.strengths?.length > 0 && <div><p className="text-green-400 text-sm font-medium mb-2">Pontos fortes</p>{analysis.strengths.map((s: string, i: number) => <p key={i} className="text-gray-300 text-sm">• {s}</p>)}</div>}
-              {analysis.improvements?.length > 0 && <div><p className="text-yellow-400 text-sm font-medium mb-2">Melhorias sugeridas</p>{analysis.improvements.map((s: string, i: number) => <p key={i} className="text-gray-300 text-sm">• {s}</p>)}</div>}
+              {analysis.strengths?.length > 0 && <div><p className="text-green-400 text-sm font-medium mb-2">Pontos fortes</p>{analysis.strengths.map((s: string, i: number) => <p key={i} className="text-gray-300 text-sm">â€¢ {s}</p>)}</div>}
+              {analysis.improvements?.length > 0 && <div><p className="text-yellow-400 text-sm font-medium mb-2">Melhorias sugeridas</p>{analysis.improvements.map((s: string, i: number) => <p key={i} className="text-gray-300 text-sm">â€¢ {s}</p>)}</div>}
               {analysis.rewritten && <div><p className="text-blue-400 text-sm font-medium mb-2">Versao reescrita</p><div className="bg-gray-800 rounded-lg p-3"><p className="text-gray-200 text-sm whitespace-pre-wrap">{analysis.rewritten}</p></div></div>}
             </div>
           )}
         </div>
       )}
 
-      {/* ── ABA: HISTORICO ── */}
+      {/* â”€â”€ ABA: HISTORICO â”€â”€ */}
       {tab === 'posts' && (
         <div className="space-y-4">
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-4">
@@ -991,7 +1002,7 @@ export default function Conteudo() {
             </div>
 
             <div className="rounded-xl border border-gray-700 bg-gray-800/60 p-3">
-              <p className="text-white text-sm font-medium mb-3">Filtros do histórico</p>
+              <p className="text-white text-sm font-medium mb-3">Filtros do histÃ³rico</p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs text-gray-400 mb-1">Plataforma</label>
@@ -1031,7 +1042,7 @@ export default function Conteudo() {
                 <span className={`text-xs px-2 py-1 rounded-full ${post.platform === 'linkedin' ? 'bg-blue-900 text-blue-300' : 'bg-indigo-900 text-indigo-300'}`}>{post.platform}</span>
                 <span className={`text-xs flex items-center gap-1 ${post.status === 'published' ? 'text-green-400' : post.status === 'scheduled' ? 'text-yellow-400' : 'text-gray-500'}`}>
                   {post.status === 'published' ? <CheckCircle size={12} /> : <Clock size={12} />}
-                  {post.status === 'draft' ? 'Rascunho' : post.status === 'scheduled' ? `Agendado${post.scheduledAt ? ' · ' + new Date(post.scheduledAt).toLocaleString('pt-BR') : ''}` : 'Publicado'}
+                  {post.status === 'draft' ? 'Rascunho' : post.status === 'scheduled' ? `Agendado${post.scheduledAt ? ' Â· ' + new Date(post.scheduledAt).toLocaleString('pt-BR') : ''}` : 'Publicado'}
                 </span>
               </div>
               {post.imageUrl && <img src={post.imageUrl} alt="" className="w-full h-32 object-cover rounded-lg mb-3" />}
@@ -1051,9 +1062,23 @@ export default function Conteudo() {
                   <Copy size={13} /> {copiedPostId === post.id ? '✓ Copiado!' : 'Copiar'}
                 </button>
                 {post.status !== 'published' && (
-                  <button onClick={() => setPublishModal({ post })}
+                  <button
+                    onClick={() => {
+                      setScheduleDate(post.scheduledAt ? new Date(post.scheduledAt).toISOString().slice(0, 16) : '');
+                      setPublishModal({ post });
+                    }}
                     className="flex items-center gap-1.5 bg-green-700 hover:bg-green-600 text-white text-sm px-3 py-1.5 rounded-lg transition-colors">
                     <Send size={13} /> Publicar / Agendar
+                  </button>
+                )}
+                {post.status === 'scheduled' && (
+                  <button
+                    onClick={() => {
+                      setScheduleDate(post.scheduledAt ? new Date(post.scheduledAt).toISOString().slice(0, 16) : '');
+                      setPublishModal({ post });
+                    }}
+                    className="flex items-center gap-1.5 bg-yellow-700 hover:bg-yellow-600 text-white text-sm px-3 py-1.5 rounded-lg transition-colors">
+                    <CalendarDays size={13} /> Reagendar
                   </button>
                 )}
               </div>
