@@ -15,49 +15,7 @@ const TONES = [
 ];
 
 interface Product { id: string; name: string; url?: string; type?: string; price?: number; }
-interface SavedPost { id: string; platform: string; status: string; content: string; cta?: string; hashtags?: string; scheduledAt?: string; publishedAt?: string; createdAt?: string; imageUrl?: string; }
-
-function fmtDate(iso?: string) {
-  if (!iso) return 'â€”';
-  return new Date(iso).toLocaleString('pt-BR', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  });
-}
-
-
-// PublishModal externo â€” tipo estavel, sem closure do Conteudo
-function PublishModal({ postId, publishing, onPublish, onClose }: { postId: string; publishing: string | null; onPublish: (id: string, scheduledAt?: string) => void; onClose: () => void; }) {
-  const [localDate, setLocalDate] = useState("");
-  return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-md space-y-5">
-        <div className="flex items-center justify-between">
-          <h3 className="text-white font-semibold text-lg">Post salvo! O que fazer agora?</h3>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-300"><X size={18} /></button>
-        </div>
-        <button onClick={() => onPublish(postId)} disabled={publishing === postId}
-          className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white py-3 rounded-xl font-medium transition-colors">
-          <Send size={16} /> {publishing === postId ? "Publicando..." : "Publicar agora"}
-        </button>
-        <div className="border-t border-gray-800 pt-4 space-y-3">
-          <p className="text-sm text-gray-400 flex items-center gap-2"><Calendar size={14} /> Ou agendar para:</p>
-          <p className="text-xs text-yellow-500">Horario de Brasilia (UTC-3)</p>
-          <input type="datetime-local" value={localDate} onChange={e => setLocalDate(e.target.value)}
-            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" />
-          <button onClick={() => { if (localDate) onPublish(postId, localDate); }}
-            disabled={!localDate || publishing === postId}
-            className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white py-2 rounded-xl text-sm transition-colors">
-            <Calendar size={14} /> Agendar publicacao
-          </button>
-        </div>
-        <button onClick={onClose} className="w-full text-gray-500 hover:text-gray-300 text-sm py-2 transition-colors">
-          Deixar como rascunho por enquanto
-        </button>
-      </div>
-    </div>
-  );
-}
+interface SavedPost { id: string; platform: string; status: string; content: string; cta?: string; hashtags?: string; scheduledAt?: string; imageUrl?: string; }
 
 export default function Conteudo() {
   const [tab, setTab] = useState<'generate' | 'upload' | 'analyze' | 'posts'>('generate');
@@ -100,22 +58,18 @@ export default function Conteudo() {
   const [publishModal, setPublishModal] = useState<{ post: SavedPost } | null>(null);
   const [scheduleDate, setScheduleDate] = useState('');
   const [copiedPostId, setCopiedPostId] = useState<string | null>(null);
-  
+
   // Filtros de posts
-  const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [filterPlatform, setFilterPlatform] = useState<string>('all');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterPlatform, setFilterPlatform] = useState('all');
 
   // Agendamento em lote (per-post datetime)
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [batchSelected, setBatchSelected] = useState<string[]>([]);
   const [batchSchedules, setBatchSchedules] = useState<Record<string, string>>({});
   const [schedulingBatch, setSchedulingBatch] = useState(false);
-
-  // Agendamento recorrente
-  const [showRecurringModal, setShowRecurringModal] = useState(false);
-  const [recurringSelected, setRecurringSelected] = useState<string[]>([]);
-  const [recurringStart, setRecurringStart] = useState('');
-  const [schedulingRecurring, setSchedulingRecurring] = useState(false);
+  const [recurringBase, setRecurringBase] = useState(''); // data/hora base para recorrente
+  const [recurringTime, setRecurringTime] = useState('08:00'); // horario fixo
 
   // Importar post pronto
   const [importContent, setImportContent] = useState('');
@@ -144,7 +98,32 @@ export default function Conteudo() {
   }
 
   async function loadPosts() {
-    try { const { data } = await api.get('/content/posts'); setPosts(data); } catch {}
+    try {
+      const { data } = await api.get('/content/posts');
+      // Ordenar: agendados por data (mais próximo primeiro), depois rascunhos, depois publicados
+      const sorted = [...data].sort((a: SavedPost, b: SavedPost) => {
+        const order = (p: SavedPost) => p.status === 'scheduled' ? 0 : p.status === 'draft' ? 1 : 2;
+        if (order(a) !== order(b)) return order(a) - order(b);
+        if (a.status === 'scheduled' && b.status === 'scheduled') {
+          return new Date(a.scheduledAt!).getTime() - new Date(b.scheduledAt!).getTime();
+        }
+        return new Date(b.scheduledAt || 0).getTime() - new Date(a.scheduledAt || 0).getTime();
+      });
+      setPosts(sorted);
+    } catch {}
+  }
+
+  // Aplica agendamento recorrente: distribui selecionados dia a dia a partir da base
+  function applyRecurring() {
+    if (!recurringBase) return;
+    const base = new Date(recurringBase);
+    const updated: Record<string, string> = { ...batchSchedules };
+    batchSelected.forEach((id, idx) => {
+      const d = new Date(base);
+      d.setDate(d.getDate() + idx);
+      updated[id] = d.toISOString().slice(0, 16); // formato datetime-local
+    });
+    setBatchSchedules(updated);
   }
 
   async function generate() {
@@ -284,29 +263,6 @@ export default function Conteudo() {
     finally { setSchedulingBatch(false); }
   }
 
-  async function confirmRecurring() {
-    if (recurringSelected.length === 0) return alert('Selecione pelo menos um post');
-    if (!recurringStart) return alert('Defina a data e hora inicial');
-    setSchedulingRecurring(true);
-    try {
-      const startDate = new Date(recurringStart);
-      const items = recurringSelected.map((postId, idx) => {
-        const d = new Date(startDate);
-        d.setDate(d.getDate() + idx);
-        return { postId, scheduledAt: d.toISOString() };
-      });
-      await api.post('/content/posts/schedule-batch', { items });
-      const endDate = new Date(startDate);
-      endDate.setDate(endDate.getDate() + recurringSelected.length - 1);
-      alert(`${items.length} post(s) agendado(s)!\nInÃ­cio: ${fmtDate(items[0].scheduledAt)}\nFim: ${fmtDate(items[items.length - 1].scheduledAt)}`);
-      setShowRecurringModal(false);
-      setRecurringSelected([]);
-      setRecurringStart('');
-      loadPosts();
-    } catch (e: any) { alert(e.response?.data?.error || 'Erro ao agendar'); }
-    finally { setSchedulingRecurring(false); }
-  }
-
   async function saveImportedPost() {
     if (!importContent.trim()) return alert('Digite o conteudo do post');
     setSavingImport(true);
@@ -340,7 +296,7 @@ export default function Conteudo() {
         return;
       }
       setWeeklyPosts(data.posts);
-      // Pre-preenche horÃ¡rios sugeridos com datas da prÃ³xima semana
+      // Pre-preenche horários sugeridos com datas da próxima semana
       const schedules: Record<number, string> = {};
       const today = new Date();
       const dayMap: Record<string, number> = {
@@ -350,11 +306,7 @@ export default function Conteudo() {
       data.posts.forEach((p: any, i: number) => {
         const targetDay = dayMap[p.day] ?? i;
         const d = new Date(today);
-        let diff = (targetDay - today.getDay() + 7) % 7;
-        // Se diff for 0 e nÃ£o for hoje, vai para prÃ³xima semana
-        if (diff === 0 && targetDay !== today.getDay()) {
-          diff = 7;
-        }
+        const diff = (targetDay - today.getDay() + 7) % 7 || 7;
         d.setDate(today.getDate() + diff);
         const [hh, mm] = (p.suggestedTime || '08:00').split(':');
         d.setHours(parseInt(hh), parseInt(mm || '0'), 0, 0);
@@ -370,58 +322,74 @@ export default function Conteudo() {
     }
   }
 
-  async function saveWeeklyPosts(mode: 'draft' | 'scheduled' = 'scheduled') {
+  async function saveWeeklyPosts() {
     if (weeklyPosts.length === 0) return;
     setSavingWeekly(true);
     try {
-      const payload = weeklyPosts.map((p: any, i: number) => ({
-        platform: weeklyPlatform,
-        content: p.content,
-        cta: p.cta || null,
-        hashtags: Array.isArray(p.hashtags) ? p.hashtags.join(' ') : (p.hashtags || null),
-        status: mode === 'scheduled' && weeklySchedules[i] ? 'scheduled' : 'draft',
-        scheduledAt: mode === 'scheduled' && weeklySchedules[i]
-          ? new Date(weeklySchedules[i]).toISOString()
-          : null,
-      }));
-
-      const { data } = await api.post('/content/posts/batch', { posts: payload });
-      const saved = data?.count || payload.length;
-      alert(
-        mode === 'scheduled'
-          ? `${saved} posts salvos no historico e agendados!`
-          : `${saved} posts salvos no historico como rascunhos!`
-      );
+      for (const p of weeklyPosts) {
+        await api.post('/content/posts', {
+          platform: weeklyPlatform,
+          content: p.content,
+          cta: p.cta || null,
+          hashtags: Array.isArray(p.hashtags) ? p.hashtags.join(' ') : (p.hashtags || null),
+          status: 'draft',
+        });
+      }
+      alert(`${weeklyPosts.length} posts salvos como rascunho no Historico! Acesse a aba Historico para agendar ou publicar.`);
       setShowWeeklyModal(false);
       setWeeklyPosts([]);
       setWeeklyTopic('');
       setWeeklyStep('config');
-      setWeeklySchedules({});
-      setFilterStatus('all');
-      setFilterPlatform('all');
       if (tab === 'posts') loadPosts();
     } catch (e: any) {
-      console.error('[saveWeeklyPosts]', e?.response?.data || e);
       alert(e.response?.data?.error || 'Erro ao salvar posts');
     } finally {
       setSavingWeekly(false);
     }
   }
 
-  // LÃ³gica de filtro para posts
-  const filteredPosts = posts.filter(p => {
-    const statusOk = filterStatus === 'all' || p.status === filterStatus;
-    const platOk = filterPlatform === 'all' || p.platform === filterPlatform;
-    return statusOk && platOk;
-  });
+  // ─── MODALS ─────────────────────────────────────────────────────────────────
 
-  // â”€â”€â”€ RENDER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  function PublishModal({ postId, onClose }: { postId: string; onClose: () => void }) {
+    const [localDate, setLocalDate] = useState('');
+    return (
+      <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+        <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-md space-y-5">
+          <div className="flex items-center justify-between">
+            <h3 className="text-white font-semibold text-lg">Post salvo! O que fazer agora?</h3>
+            <button onClick={onClose} className="text-gray-500 hover:text-gray-300"><X size={18} /></button>
+          </div>
+          <button
+            onClick={() => publishPost(postId)}
+            disabled={publishing === postId}
+            className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white py-3 rounded-xl font-medium transition-colors">
+            <Send size={16} /> {publishing === postId ? 'Publicando...' : 'Publicar agora'}
+          </button>
+          <div className="border-t border-gray-800 pt-4 space-y-3">
+            <p className="text-sm text-gray-400 flex items-center gap-2"><Calendar size={14} /> Ou agendar para:</p>
+            <input type="datetime-local" value={localDate} onChange={e => setLocalDate(e.target.value)}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" />
+            <button onClick={() => localDate && publishPost(postId, localDate)}
+              disabled={!localDate || publishing === postId}
+              className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white py-2 rounded-xl text-sm transition-colors">
+              <Calendar size={14} /> Agendar publicacao
+            </button>
+          </div>
+          <button onClick={onClose} className="w-full text-gray-500 hover:text-gray-300 text-sm py-2 transition-colors">
+            Deixar como rascunho por enquanto
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── RENDER ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="space-y-6">
       {/* Modal publicar apos salvar */}
       {showPublishModal && savedPostId && (
-        <PublishModal postId={savedPostId} publishing={publishing} onPublish={publishPost} onClose={() => { setShowPublishModal(false); setSavedPostId(null); }} />
+        <PublishModal postId={savedPostId} onClose={() => { setShowPublishModal(false); setSavedPostId(null); }} />
       )}
 
       {/* Modal publicar do historico */}
@@ -429,36 +397,49 @@ export default function Conteudo() {
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-md space-y-5">
             <div className="flex items-center justify-between">
-              <h3 className="text-white font-semibold">Publicar post</h3>
+              <h3 className="text-white font-semibold">
+                {publishModal.post.status === 'scheduled' ? 'Reagendar post' : 'Publicar / Agendar'}
+              </h3>
               <button onClick={() => setPublishModal(null)} className="text-gray-500 hover:text-gray-300"><X size={18} /></button>
             </div>
-            <p className="text-gray-400 text-sm line-clamp-3">{publishModal.post.content}</p>
+            {publishModal.post.status === 'scheduled' && publishModal.post.scheduledAt && (
+              <p className="text-yellow-400 text-xs flex items-center gap-1">
+                <Clock size={12} /> Agendado para: {new Date(publishModal.post.scheduledAt).toLocaleString('pt-BR')}
+              </p>
+            )}
+            <div className="max-h-24 overflow-y-auto bg-gray-800 rounded-lg p-3">
+              <p className="text-gray-400 text-sm">{publishModal.post.content}</p>
+            </div>
             <button onClick={() => publishPost(publishModal.post.id)} disabled={publishing === publishModal.post.id}
               className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white py-3 rounded-xl font-medium">
               <Send size={16} /> {publishing === publishModal.post.id ? 'Publicando...' : 'Publicar agora'}
             </button>
             <div className="border-t border-gray-800 pt-4 space-y-3">
-              <p className="text-sm text-gray-400">Ou agendar para:</p>
-              <input type="datetime-local" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)}
+              <p className="text-sm text-gray-400">
+                {publishModal.post.status === 'scheduled' ? 'Nova data e hora:' : 'Ou agendar para:'}
+              </p>
+              <input type="datetime-local"
+                value={scheduleDate || (publishModal.post.scheduledAt ? publishModal.post.scheduledAt.slice(0,16) : '')}
+                onChange={e => setScheduleDate(e.target.value)}
                 className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" />
               <button onClick={() => scheduleDate && publishPost(publishModal.post.id, scheduleDate)}
                 disabled={!scheduleDate || publishing === publishModal.post.id}
                 className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white py-2 rounded-xl text-sm">
-                <Calendar size={14} /> Agendar
+                <Calendar size={14} /> {publishModal.post.status === 'scheduled' ? 'Confirmar reagendamento' : 'Agendar'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* â”€â”€ MODAL GERADOR SEMANAL â”€â”€ */}
+      {/* ── MODAL GERADOR SEMANAL ── */}
       {showWeeklyModal && (
         <div className="fixed inset-0 bg-black/80 flex items-start justify-center z-50 p-4 overflow-y-auto">
           <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-2xl space-y-5 my-4">
             <div className="flex items-center justify-between">
               <h3 className="text-white font-semibold text-lg flex items-center gap-2">
                 <LayoutList size={18} className="text-blue-400" />
-                {weeklyStep === 'config' ? 'Gerar semana de posts' : `${weeklyPosts.length} posts gerados â€” revise e agende`}
+                {weeklyStep === 'config' ? 'Gerar semana de posts' : `${weeklyPosts.length} posts gerados — revise e agende`}
               </h3>
               <button onClick={() => { setShowWeeklyModal(false); setWeeklyStep('config'); setWeeklyPosts([]); }}
                 className="text-gray-500 hover:text-gray-300"><X size={18} /></button>
@@ -470,7 +451,7 @@ export default function Conteudo() {
                   <label className="text-sm text-gray-400 block mb-1">Tema da semana *</label>
                   <textarea value={weeklyTopic} onChange={e => setWeeklyTopic(e.target.value)} rows={3}
                     className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white resize-none text-sm"
-                    placeholder="Ex: InstalaÃ§Ã£o de inversores de frequÃªncia para bombas industriais" />
+                    placeholder="Ex: Instalação de inversores de frequência para bombas industriais" />
                 </div>
                 <div>
                   <label className="text-sm text-gray-400 block mb-1">Plataforma</label>
@@ -501,7 +482,7 @@ export default function Conteudo() {
             {weeklyStep === 'review' && weeklyPosts.length > 0 && (
               <>
                 <p className="text-xs text-gray-500">
-                  Ajuste o dia e horario de cada post. Se deixar em branco, vai salvar como rascunho.
+                  Revise cada post. Ao salvar, todos vao para o Historico como rascunho. Depois agende pelo Historico.
                 </p>
                 <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
                   {weeklyPosts.map((p: any, i: number) => (
@@ -514,14 +495,10 @@ export default function Conteudo() {
                           {p.angle}
                         </span>
                       </div>
-                      <p className="text-gray-200 text-sm whitespace-pre-wrap line-clamp-4">{p.content}</p>
-                      {p.cta && <p className="text-blue-400 text-xs">CTA: {p.cta}</p>}
-                      <div>
-                        <label className="text-xs text-gray-500 block mb-1">Data e hora de publicacao</label>
-                        <input type="datetime-local" value={weeklySchedules[i] || ''}
-                          onChange={e => setWeeklySchedules(prev => ({ ...prev, [i]: e.target.value }))}
-                          className="w-full bg-gray-900 border border-gray-600 rounded-lg px-2 py-1.5 text-white text-sm" />
+                      <div className="max-h-48 overflow-y-auto bg-gray-900 rounded-lg p-2">
+                        <p className="text-gray-200 text-sm whitespace-pre-wrap">{p.content}</p>
                       </div>
+                      {p.cta && <p className="text-blue-400 text-xs">CTA: {p.cta}</p>}
                     </div>
                   ))}
                 </div>
@@ -530,15 +507,10 @@ export default function Conteudo() {
                     className="flex-1 bg-gray-700 hover:bg-gray-600 text-gray-300 py-2.5 rounded-xl text-sm transition-colors">
                     Voltar e regerar
                   </button>
-                  <button onClick={() => saveWeeklyPosts('draft')} disabled={savingWeekly}
-                    className="flex-1 flex items-center justify-center gap-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white py-2.5 rounded-xl font-medium text-sm transition-colors">
-                    <Save size={14} />
-                    {savingWeekly ? 'Salvando...' : 'Salvar como rascunho'}
-                  </button>
-                  <button onClick={() => saveWeeklyPosts('scheduled')} disabled={savingWeekly}
+                  <button onClick={saveWeeklyPosts} disabled={savingWeekly}
                     className="flex-1 flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white py-2.5 rounded-xl font-medium text-sm transition-colors">
                     <Save size={14} />
-                    {savingWeekly ? 'Salvando...' : `Salvar e agendar ${weeklyPosts.length}`}
+                    {savingWeekly ? 'Salvando...' : `Salvar ${weeklyPosts.length} posts`}
                   </button>
                 </div>
               </>
@@ -547,89 +519,7 @@ export default function Conteudo() {
         </div>
       )}
 
-      {/* â”€â”€ MODAL AGENDAMENTO RECORRENTE â”€â”€ */}
-      {showRecurringModal && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-lg space-y-4 max-h-[85vh] overflow-y-auto">
-            <div className="flex items-center justify-between">
-              <h3 className="text-white font-semibold text-lg flex items-center gap-2">
-                <CalendarDays size={18} /> Agendar Recorrente
-              </h3>
-              <button onClick={() => setShowRecurringModal(false)} className="text-gray-500 hover:text-gray-300"><X size={18} /></button>
-            </div>
-            <p className="text-xs text-gray-500">
-              Selecione os posts e defina a data/hora inicial. Cada post serÃ¡ agendado 1 dia apÃ³s o anterior, no mesmo horÃ¡rio.
-            </p>
-
-            {/* Data inicial */}
-            <div>
-              <label className="text-sm text-gray-400 block mb-1">Data e hora do 1Âº post *</label>
-              <input type="datetime-local" value={recurringStart}
-                onChange={e => setRecurringStart(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" />
-              <p className="text-xs text-yellow-500 mt-1">HorÃ¡rio de BrasÃ­lia (UTC-3)</p>
-            </div>
-
-            {/* Preview das datas */}
-            {recurringStart && recurringSelected.length > 0 && (
-              <div className="bg-gray-800 rounded-lg p-3">
-                <p className="text-xs text-gray-400 mb-2 font-medium">Preview do agendamento:</p>
-                {recurringSelected.map((id, idx) => {
-                  const d = new Date(recurringStart);
-                  d.setDate(d.getDate() + idx);
-                  const post = posts.find(p => p.id === id);
-                  return (
-                    <div key={id} className="flex items-center gap-2 text-xs text-gray-300 py-1 border-b border-gray-700 last:border-0">
-                      <span className="text-purple-400 font-medium w-5">#{idx + 1}</span>
-                      <span className="text-gray-400">{fmtDate(d.toISOString())}</span>
-                      <span className="flex-1 truncate">{post?.content.substring(0, 40)}...</span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Lista de posts */}
-            <div>
-              <label className="text-sm text-gray-400 block mb-2">Selecione os posts (na ordem de publicaÃ§Ã£o)</label>
-              {posts.filter(p => p.status === 'draft').length === 0 && (
-                <p className="text-gray-600 text-sm text-center py-4">Nenhum rascunho disponÃ­vel.</p>
-              )}
-              <div className="space-y-2 max-h-48 overflow-y-auto">
-                {posts.filter(p => p.status === 'draft').map(post => {
-                  const idx = recurringSelected.indexOf(post.id);
-                  const isSelected = idx !== -1;
-                  return (
-                    <div key={post.id}
-                      onClick={() => setRecurringSelected(prev =>
-                        prev.includes(post.id) ? prev.filter(id => id !== post.id) : [...prev, post.id]
-                      )}
-                      className={`rounded-xl border p-3 cursor-pointer transition-colors ${isSelected ? 'border-purple-500 bg-purple-900/20' : 'border-gray-700 bg-gray-800 hover:border-gray-600'}`}
-                    >
-                      <div className="flex items-center gap-3">
-                        {isSelected && <span className="w-5 h-5 rounded-full bg-purple-600 text-white text-xs flex items-center justify-center font-bold flex-shrink-0">{idx + 1}</span>}
-                        {!isSelected && <span className="w-5 h-5 rounded-full border border-gray-600 flex-shrink-0" />}
-                        <div className="flex-1 min-w-0">
-                          <span className={`text-xs px-1.5 py-0.5 rounded mr-2 ${post.platform === 'linkedin' ? 'bg-blue-900 text-blue-300' : 'bg-indigo-900 text-indigo-300'}`}>{post.platform}</span>
-                          <span className="text-gray-300 text-sm">{post.content.substring(0, 60)}...</span>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <button onClick={confirmRecurring} disabled={schedulingRecurring || recurringSelected.length === 0 || !recurringStart}
-              className="w-full flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white py-3 rounded-xl font-medium transition-colors">
-              <CalendarDays size={16} />
-              {schedulingRecurring ? 'Agendando...' : `Agendar ${recurringSelected.length} post(s) â€” 1/dia`}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* â”€â”€ MODAL AGENDAR EM LOTE (per-post datetime) â”€â”€ */}
+      {/* ── MODAL AGENDAR EM LOTE (per-post datetime) ── */}
       {showBatchModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-lg space-y-4 max-h-[85vh] overflow-y-auto">
@@ -641,12 +531,31 @@ export default function Conteudo() {
             </div>
             <p className="text-xs text-gray-500">Selecione os posts e defina data/hora individual para cada um.</p>
 
-            {posts.filter(p => p.status === 'draft').length === 0 && (
-              <p className="text-gray-600 text-sm text-center py-4">Nenhum rascunho disponivel.</p>
+            {/* Agendamento recorrente */}
+            <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 space-y-3">
+              <p className="text-sm font-medium text-purple-300 flex items-center gap-2">
+                <CalendarDays size={14} /> Agendamento recorrente (1 post por dia)
+              </p>
+              <p className="text-xs text-gray-500">Escolha a data do 1º post — os outros seguem automaticamente (+1 dia cada).</p>
+              <div className="flex gap-2 flex-wrap items-end">
+                <div className="flex-1 min-w-[180px]">
+                  <label className="text-xs text-gray-500 block mb-1">Data e hora do 1º post</label>
+                  <input type="datetime-local" value={recurringBase} onChange={e => setRecurringBase(e.target.value)}
+                    className="w-full bg-gray-900 border border-gray-600 rounded-lg px-2 py-1.5 text-white text-sm" />
+                </div>
+                <button onClick={applyRecurring} disabled={!recurringBase || batchSelected.length === 0}
+                  className="flex items-center gap-1.5 bg-purple-700 hover:bg-purple-600 disabled:opacity-40 text-white text-sm px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap">
+                  <Zap size={13} /> Aplicar a {batchSelected.length} selecionado(s)
+                </button>
+              </div>
+            </div>
+
+            {posts.filter(p => p.status === 'draft' || p.status === 'scheduled').length === 0 && (
+              <p className="text-gray-600 text-sm text-center py-4">Nenhum rascunho ou agendado disponivel.</p>
             )}
 
             <div className="space-y-3">
-              {posts.filter(p => p.status === 'draft').map(post => (
+              {posts.filter(p => p.status === 'draft' || p.status === 'scheduled').map(post => (
                 <div key={post.id} className={`rounded-xl border p-3 space-y-2 transition-colors ${batchSelected.includes(post.id) ? 'border-purple-500 bg-purple-900/20' : 'border-gray-700 bg-gray-800'}`}>
                   <label className="flex items-start gap-3 cursor-pointer">
                     <input type="checkbox" checked={batchSelected.includes(post.id)}
@@ -654,6 +563,9 @@ export default function Conteudo() {
                       className="mt-1 accent-purple-500" />
                     <div className="flex-1 min-w-0">
                       <span className={`text-xs px-1.5 py-0.5 rounded mr-2 ${post.platform === 'linkedin' ? 'bg-blue-900 text-blue-300' : 'bg-indigo-900 text-indigo-300'}`}>{post.platform}</span>
+                      {post.status === 'scheduled' && post.scheduledAt && (
+                        <span className="text-xs text-yellow-400 mr-2">Agendado: {new Date(post.scheduledAt).toLocaleString('pt-BR')}</span>
+                      )}
                       <span className="text-gray-300 text-sm">{post.content.substring(0, 80)}...</span>
                     </div>
                   </label>
@@ -690,7 +602,7 @@ export default function Conteudo() {
         ))}
       </div>
 
-      {/* â”€â”€ ABA: GERAR POST â”€â”€ */}
+      {/* ── ABA: GERAR POST ── */}
       {tab === 'generate' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-5">
@@ -794,14 +706,14 @@ export default function Conteudo() {
                   )}
                   {generated.hashtags && (
                     <div className="flex flex-wrap gap-2">
-                      {(Array.isArray(generated.hashtags) ? generated.hashtags : String(generated.hashtags).split(/\s+/)).map((h: string, i: number) => (
+                      {generated.hashtags.map((h: string, i: number) => (
                         <span key={i} className="bg-gray-800 text-blue-400 text-xs px-2 py-1 rounded">{h}</span>
                       ))}
                     </div>
                   )}
                   <div className="border-t border-gray-800 pt-4">
                     <p className="text-xs text-gray-500 mb-3 flex items-center gap-1">
-                      <ImageIcon size={12} /> Gerar prompt para imagem â€” copie e use no Midjourney, DALL-E ou Leonardo
+                      <ImageIcon size={12} /> Gerar prompt para imagem — copie e use no Midjourney, DALL-E ou Leonardo
                     </p>
                     <div className="flex gap-2 flex-wrap mb-3">
                       {IMAGE_STYLES.map(s => (
@@ -817,7 +729,7 @@ export default function Conteudo() {
                         <p className="text-gray-300 text-xs leading-relaxed">{imagePrompt}</p>
                         <button onClick={copyPrompt}
                           className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg transition-colors ${promptCopied ? 'bg-green-700 text-green-200' : 'bg-gray-700 hover:bg-gray-600 text-gray-300'}`}>
-                          {promptCopied ? 'âœ“ Copiado!' : 'Copiar prompt'}
+                          {promptCopied ? '✓ Copiado!' : 'Copiar prompt'}
                         </button>
                       </div>
                     )}
@@ -829,7 +741,7 @@ export default function Conteudo() {
         </div>
       )}
 
-      {/* â”€â”€ ABA: UPLOAD DE MATERIAL â”€â”€ */}
+      {/* ── ABA: UPLOAD DE MATERIAL ── */}
       {tab === 'upload' && (
         <div className="space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -869,7 +781,7 @@ export default function Conteudo() {
               <div>
                 <Upload size={40} className="mx-auto text-gray-600 mb-3" />
                 <p className="text-gray-300 font-medium">Arraste ou clique para selecionar</p>
-                <p className="text-gray-500 text-sm mt-1">PDF, PNG, JPG, TXT â€” ate 20MB</p>
+                <p className="text-gray-500 text-sm mt-1">PDF, PNG, JPG, TXT — ate 20MB</p>
               </div>
             )}
           </div>
@@ -906,7 +818,7 @@ export default function Conteudo() {
                   </div>
                   {post.cta && <div className="bg-blue-900/20 border border-blue-800 rounded-lg px-4 py-2"><p className="text-blue-300 text-sm">CTA: {post.cta}</p></div>}
                   <div className="flex flex-wrap gap-2">
-                    {(Array.isArray(post.hashtags) ? post.hashtags : (post.hashtags || '').split(/\s+/).filter(Boolean)).map((h: string, j: number) => <span key={j} className="bg-gray-800 text-blue-400 text-xs px-2 py-1 rounded">{h}</span>)}
+                    {post.hashtags?.map((h: string, j: number) => <span key={j} className="bg-gray-800 text-blue-400 text-xs px-2 py-1 rounded">{h}</span>)}
                   </div>
                 </div>
               ))}
@@ -950,7 +862,7 @@ export default function Conteudo() {
         </div>
       )}
 
-      {/* â”€â”€ ABA: ANALISAR TEXTO â”€â”€ */}
+      {/* ── ABA: ANALISAR TEXTO ── */}
       {tab === 'analyze' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-4">
@@ -969,116 +881,53 @@ export default function Conteudo() {
                 <span className="text-3xl font-bold text-white">{analysis.score}/10</span>
                 <span className="text-gray-400 text-sm">Score de qualidade</span>
               </div>
-              {analysis.strengths?.length > 0 && <div><p className="text-green-400 text-sm font-medium mb-2">Pontos fortes</p>{analysis.strengths.map((s: string, i: number) => <p key={i} className="text-gray-300 text-sm">â€¢ {s}</p>)}</div>}
-              {analysis.improvements?.length > 0 && <div><p className="text-yellow-400 text-sm font-medium mb-2">Melhorias sugeridas</p>{analysis.improvements.map((s: string, i: number) => <p key={i} className="text-gray-300 text-sm">â€¢ {s}</p>)}</div>}
+              {analysis.strengths?.length > 0 && <div><p className="text-green-400 text-sm font-medium mb-2">Pontos fortes</p>{analysis.strengths.map((s: string, i: number) => <p key={i} className="text-gray-300 text-sm">• {s}</p>)}</div>}
+              {analysis.improvements?.length > 0 && <div><p className="text-yellow-400 text-sm font-medium mb-2">Melhorias sugeridas</p>{analysis.improvements.map((s: string, i: number) => <p key={i} className="text-gray-300 text-sm">• {s}</p>)}</div>}
               {analysis.rewritten && <div><p className="text-blue-400 text-sm font-medium mb-2">Versao reescrita</p><div className="bg-gray-800 rounded-lg p-3"><p className="text-gray-200 text-sm whitespace-pre-wrap">{analysis.rewritten}</p></div></div>}
             </div>
           )}
         </div>
       )}
 
-      {/* â”€â”€ ABA: HISTORICO â”€â”€ */}
+      {/* ── ABA: HISTORICO ── */}
       {tab === 'posts' && (
         <div className="space-y-4">
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-4">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <span className="text-gray-400 text-sm">
-                {filteredPosts.length} post{filteredPosts.length !== 1 ? 's' : ''} filtrado{filteredPosts.length !== 1 ? 's' : ''}
-              </span>
-              <div className="flex gap-2 flex-wrap">
-                <button onClick={() => { setShowWeeklyModal(true); setWeeklyStep('config'); setWeeklyPosts([]); }}
-                  className="flex items-center gap-2 bg-blue-700 hover:bg-blue-600 text-white text-sm px-4 py-2 rounded-lg transition-colors">
-                  <LayoutList size={14} /> Gerar semana
-                </button>
-                <button onClick={() => setShowRecurringModal(true)}
-                  className="flex items-center gap-2 bg-indigo-700 hover:bg-indigo-600 text-white text-sm px-4 py-2 rounded-lg transition-colors">
-                  <CalendarDays size={14} /> Recorrente
-                </button>
-                <button onClick={() => setShowBatchModal(true)}
-                  className="flex items-center gap-2 bg-purple-700 hover:bg-purple-600 text-white text-sm px-4 py-2 rounded-lg transition-colors">
-                  <CalendarDays size={14} /> Agendar rascunhos
-                </button>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-gray-700 bg-gray-800/60 p-3">
-              <p className="text-white text-sm font-medium mb-3">Filtros do histÃ³rico</p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">Plataforma</label>
-                <select
-                  value={filterPlatform}
-                  onChange={e => setFilterPlatform(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
-                >
-                  <option value="all">Todas plataformas</option>
-                  <option value="linkedin">LinkedIn</option>
-                  <option value="facebook">Facebook</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">Status</label>
-                <select
-                  value={filterStatus}
-                  onChange={e => setFilterStatus(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
-                >
-                  <option value="all">Todos status</option>
-                  <option value="published">Publicados</option>
-                  <option value="scheduled">Agendados</option>
-                  <option value="draft">Rascunhos</option>
-                </select>
-              </div>
-              </div>
+          <div className="flex flex-wrap gap-3 items-center justify-between">
+            <p className="text-gray-400 text-sm">{posts.length} post{posts.length !== 1 ? 's' : ''} salvos</p>
+            <div className="flex gap-2 flex-wrap">
+              <button onClick={() => { setShowWeeklyModal(true); setWeeklyStep('config'); setWeeklyPosts([]); }}
+                className="flex items-center gap-2 bg-blue-700 hover:bg-blue-600 text-white text-sm px-4 py-2 rounded-lg transition-colors">
+                <LayoutList size={14} /> Gerar semana
+              </button>
+              <button onClick={() => setShowBatchModal(true)}
+                className="flex items-center gap-2 bg-purple-700 hover:bg-purple-600 text-white text-sm px-4 py-2 rounded-lg transition-colors">
+                <CalendarDays size={14} /> Agendar rascunhos
+              </button>
             </div>
           </div>
 
-          {filteredPosts.length === 0 && <p className="text-gray-500 text-center py-8">Nenhum post encontrado com os filtros selecionados.</p>}
-          
-          {filteredPosts.map(post => (
+          {posts.length === 0 && <p className="text-gray-500 text-center py-8">Nenhum post salvo ainda.</p>}
+          {posts.map(post => (
             <div key={post.id} className="bg-gray-900 border border-gray-800 rounded-xl p-5">
               <div className="flex items-center justify-between mb-3">
                 <span className={`text-xs px-2 py-1 rounded-full ${post.platform === 'linkedin' ? 'bg-blue-900 text-blue-300' : 'bg-indigo-900 text-indigo-300'}`}>{post.platform}</span>
                 <span className={`text-xs flex items-center gap-1 ${post.status === 'published' ? 'text-green-400' : post.status === 'scheduled' ? 'text-yellow-400' : 'text-gray-500'}`}>
                   {post.status === 'published' ? <CheckCircle size={12} /> : <Clock size={12} />}
-                  {post.status === 'draft' ? 'Rascunho' : post.status === 'scheduled' ? `Agendado${post.scheduledAt ? ' Â· ' + new Date(post.scheduledAt).toLocaleString('pt-BR') : ''}` : 'Publicado'}
+                  {post.status === 'draft' ? 'Rascunho' : post.status === 'scheduled' ? `Agendado${post.scheduledAt ? ' · ' + new Date(post.scheduledAt).toLocaleString('pt-BR') : ''}` : 'Publicado'}
                 </span>
               </div>
               {post.imageUrl && <img src={post.imageUrl} alt="" className="w-full h-32 object-cover rounded-lg mb-3" />}
               <p className="text-gray-300 text-sm line-clamp-3">{post.content}</p>
               {post.cta && <p className="text-blue-400 text-xs mt-2">{post.cta}</p>}
-              
-              {/* Timestamps */}
-              <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-gray-600 mt-2">
-                {post.createdAt && <span>Criado: {fmtDate(post.createdAt)}</span>}
-                {post.scheduledAt && post.status === 'scheduled' && <span className="text-yellow-600">Agendado: {fmtDate(post.scheduledAt)}</span>}
-                {post.publishedAt && <span className="text-green-600">Postado: {fmtDate(post.publishedAt)}</span>}
-              </div>
-              
               <div className="mt-3 flex flex-wrap gap-2">
                 <button onClick={() => copyPostContent(post)}
                   className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg transition-colors ${copiedPostId === post.id ? 'bg-green-700 text-green-200' : 'bg-gray-700 hover:bg-gray-600 text-gray-300'}`}>
                   <Copy size={13} /> {copiedPostId === post.id ? '✓ Copiado!' : 'Copiar'}
                 </button>
                 {post.status !== 'published' && (
-                  <button
-                    onClick={() => {
-                      setScheduleDate(post.scheduledAt ? new Date(post.scheduledAt).toISOString().slice(0, 16) : '');
-                      setPublishModal({ post });
-                    }}
+                  <button onClick={() => setPublishModal({ post })}
                     className="flex items-center gap-1.5 bg-green-700 hover:bg-green-600 text-white text-sm px-3 py-1.5 rounded-lg transition-colors">
-                    <Send size={13} /> Publicar / Agendar
-                  </button>
-                )}
-                {post.status === 'scheduled' && (
-                  <button
-                    onClick={() => {
-                      setScheduleDate(post.scheduledAt ? new Date(post.scheduledAt).toISOString().slice(0, 16) : '');
-                      setPublishModal({ post });
-                    }}
-                    className="flex items-center gap-1.5 bg-yellow-700 hover:bg-yellow-600 text-white text-sm px-3 py-1.5 rounded-lg transition-colors">
-                    <CalendarDays size={13} /> Reagendar
+                    <Send size={13} /> {post.status === 'scheduled' ? 'Reagendar' : 'Publicar / Agendar'}
                   </button>
                 )}
               </div>
@@ -1089,3 +938,4 @@ export default function Conteudo() {
     </div>
   );
 }
+
