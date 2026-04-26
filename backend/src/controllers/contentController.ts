@@ -320,7 +320,11 @@ Retorne JSON:
 export async function getPosts(req: AuthRequest, res: Response) {
   const posts = await prisma.post.findMany({
     where: { userId: req.effectiveUserId! },
-    orderBy: { createdAt: 'desc' },
+    orderBy: [
+      { scheduledAt: 'desc' },
+      { publishedAt: 'desc' },
+      { createdAt: 'desc' },
+    ],
   });
   return res.json(posts);
 }

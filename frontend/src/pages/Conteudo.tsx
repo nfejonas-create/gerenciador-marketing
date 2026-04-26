@@ -100,6 +100,10 @@ export default function Conteudo() {
   const [publishModal, setPublishModal] = useState<{ post: SavedPost } | null>(null);
   const [scheduleDate, setScheduleDate] = useState('');
   const [copiedPostId, setCopiedPostId] = useState<string | null>(null);
+  
+  // Filtros de posts
+  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [filterPlatform, setFilterPlatform] = useState<string>('all');
 
   // Agendamento em lote (per-post datetime)
   const [showBatchModal, setShowBatchModal] = useState(false);
@@ -346,7 +350,11 @@ export default function Conteudo() {
       data.posts.forEach((p: any, i: number) => {
         const targetDay = dayMap[p.day] ?? i;
         const d = new Date(today);
-        const diff = (targetDay - today.getDay() + 7) % 7 || 7;
+        let diff = (targetDay - today.getDay() + 7) % 7;
+        // Se diff for 0 e não for hoje, vai para próxima semana
+        if (diff === 0 && targetDay !== today.getDay()) {
+          diff = 7;
+        }
         d.setDate(today.getDate() + diff);
         const [hh, mm] = (p.suggestedTime || '08:00').split(':');
         d.setHours(parseInt(hh), parseInt(mm || '0'), 0, 0);
@@ -392,6 +400,13 @@ export default function Conteudo() {
       setSavingWeekly(false);
     }
   }
+
+  // Lógica de filtro para posts
+  const filteredPosts = posts.filter(p => {
+    const statusOk = filterStatus === 'all' || p.status === filterStatus;
+    const platOk = filterPlatform === 'all' || p.platform === filterPlatform;
+    return statusOk && platOk;
+  });
 
   // ─── RENDER ─────────────────────────────────────────────────────────────────
 
@@ -953,9 +968,33 @@ export default function Conteudo() {
       {/* ── ABA: HISTORICO ── */}
       {tab === 'posts' && (
         <div className="space-y-4">
-          <div className="flex flex-wrap gap-3 items-center justify-between">
-            <p className="text-gray-400 text-sm">{posts.length} post{posts.length !== 1 ? 's' : ''} salvos</p>
+          {/* Filtros */}
+          <div className="flex flex-wrap gap-3 items-center justify-between bg-gray-900 border border-gray-800 rounded-xl p-4">
+            <div className="flex items-center gap-2">
+              <span className="text-gray-400 text-sm">{filteredPosts.length} post{filteredPosts.length !== 1 ? 's' : ''} filtrado{filteredPosts.length !== 1 ? 's' : ''}</span>
+            </div>
             <div className="flex gap-2 flex-wrap">
+              <select 
+                value={filterPlatform} 
+                onChange={e => setFilterPlatform(e.target.value)}
+                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
+              >
+                <option value="all">Todas plataformas</option>
+                <option value="linkedin">LinkedIn</option>
+                <option value="facebook">Facebook</option>
+              </select>
+              
+              <select 
+                value={filterStatus} 
+                onChange={e => setFilterStatus(e.target.value)}
+                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
+              >
+                <option value="all">Todos status</option>
+                <option value="published">Publicados</option>
+                <option value="scheduled">Agendados</option>
+                <option value="draft">Rascunhos</option>
+              </select>
+              
               <button onClick={() => { setShowWeeklyModal(true); setWeeklyStep('config'); setWeeklyPosts([]); }}
                 className="flex items-center gap-2 bg-blue-700 hover:bg-blue-600 text-white text-sm px-4 py-2 rounded-lg transition-colors">
                 <LayoutList size={14} /> Gerar semana
@@ -971,8 +1010,9 @@ export default function Conteudo() {
             </div>
           </div>
 
-          {posts.length === 0 && <p className="text-gray-500 text-center py-8">Nenhum post salvo ainda.</p>}
-          {posts.map(post => (
+          {filteredPosts.length === 0 && <p className="text-gray-500 text-center py-8">Nenhum post encontrado com os filtros selecionados.</p>}
+          
+          {filteredPosts.map(post => (
             <div key={post.id} className="bg-gray-900 border border-gray-800 rounded-xl p-5">
               <div className="flex items-center justify-between mb-3">
                 <span className={`text-xs px-2 py-1 rounded-full ${post.platform === 'linkedin' ? 'bg-blue-900 text-blue-300' : 'bg-indigo-900 text-indigo-300'}`}>{post.platform}</span>
@@ -984,12 +1024,14 @@ export default function Conteudo() {
               {post.imageUrl && <img src={post.imageUrl} alt="" className="w-full h-32 object-cover rounded-lg mb-3" />}
               <p className="text-gray-300 text-sm line-clamp-3">{post.content}</p>
               {post.cta && <p className="text-blue-400 text-xs mt-2">{post.cta}</p>}
+              
               {/* Timestamps */}
               <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-gray-600 mt-2">
                 {post.createdAt && <span>Criado: {fmtDate(post.createdAt)}</span>}
                 {post.scheduledAt && post.status === 'scheduled' && <span className="text-yellow-600">Agendado: {fmtDate(post.scheduledAt)}</span>}
                 {post.publishedAt && <span className="text-green-600">Postado: {fmtDate(post.publishedAt)}</span>}
               </div>
+              
               <div className="mt-3 flex flex-wrap gap-2">
                 <button onClick={() => copyPostContent(post)}
                   className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg transition-colors ${copiedPostId === post.id ? 'bg-green-700 text-green-200' : 'bg-gray-700 hover:bg-gray-600 text-gray-300'}`}>
