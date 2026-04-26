@@ -374,27 +374,28 @@ export default function Conteudo() {
     if (weeklyPosts.length === 0) return;
     setSavingWeekly(true);
     try {
-      let saved = 0;
-      for (let i = 0; i < weeklyPosts.length; i++) {
-        const p = weeklyPosts[i];
-        const scheduledAt = weeklySchedules[i];
-        await api.post('/content/posts', {
-          platform: weeklyPlatform,
-          content: p.content,
-          cta: p.cta || null,
-          hashtags: Array.isArray(p.hashtags) ? p.hashtags.join(' ') : (p.hashtags || null),
-          status: scheduledAt ? 'scheduled' : 'draft',
-          scheduledAt: scheduledAt || null,
-        });
-        saved++;
-      }
+      const payload = weeklyPosts.map((p: any, i: number) => ({
+        platform: weeklyPlatform,
+        content: p.content,
+        cta: p.cta || null,
+        hashtags: Array.isArray(p.hashtags) ? p.hashtags.join(' ') : (p.hashtags || null),
+        status: weeklySchedules[i] ? 'scheduled' : 'draft',
+        scheduledAt: weeklySchedules[i] || null,
+      }));
+
+      const { data } = await api.post('/content/posts/batch', { posts: payload });
+      const saved = data?.count || payload.length;
       alert(`${saved} posts salvos no historico${weeklySchedules[0] ? ' e agendados' : ' como rascunhos'}!`);
       setShowWeeklyModal(false);
       setWeeklyPosts([]);
       setWeeklyTopic('');
       setWeeklyStep('config');
+      setWeeklySchedules({});
+      setFilterStatus('all');
+      setFilterPlatform('all');
       if (tab === 'posts') loadPosts();
     } catch (e: any) {
+      console.error('[saveWeeklyPosts]', e?.response?.data || e);
       alert(e.response?.data?.error || 'Erro ao salvar posts');
     } finally {
       setSavingWeekly(false);
@@ -989,7 +990,9 @@ export default function Conteudo() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="rounded-xl border border-gray-700 bg-gray-800/60 p-3">
+              <p className="text-white text-sm font-medium mb-3">Filtros do histórico</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs text-gray-400 mb-1">Plataforma</label>
                 <select
@@ -1015,6 +1018,7 @@ export default function Conteudo() {
                   <option value="scheduled">Agendados</option>
                   <option value="draft">Rascunhos</option>
                 </select>
+              </div>
               </div>
             </div>
           </div>

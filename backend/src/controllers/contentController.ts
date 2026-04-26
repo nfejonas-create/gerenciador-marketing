@@ -403,6 +403,36 @@ export async function savePost(req: AuthRequest, res: Response) {
   }
 }
 
+export async function savePostsBatch(req: AuthRequest, res: Response) {
+  try {
+    const { posts } = req.body;
+    if (!Array.isArray(posts) || posts.length === 0) {
+      return res.status(400).json({ error: 'Lista de posts obrigatoria' });
+    }
+
+    const created = await prisma.$transaction(
+      posts.map((item: any) =>
+        prisma.post.create({
+          data: {
+            userId: req.effectiveUserId!,
+            platform: item.platform,
+            content: item.content,
+            cta: item.cta || null,
+            hashtags: Array.isArray(item.hashtags) ? item.hashtags.join(' ') : (item.hashtags || null),
+            status: item.status || 'draft',
+            scheduledAt: item.scheduledAt ? new Date(item.scheduledAt) : null,
+            imageUrl: item.imageUrl || null,
+          },
+        })
+      )
+    );
+
+    return res.json({ ok: true, count: created.length, posts: created });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Erro ao salvar posts em lote' });
+  }
+}
+
 export async function updatePost(req: AuthRequest, res: Response) {
   try {
     const { id } = req.params;

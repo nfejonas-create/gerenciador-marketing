@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authGuard } from '../middleware/authGuard';
-import { generatePost, analyzeContent, generateCalendar, getPosts, savePost, updatePost, deletePost, uploadAndGeneratePosts, scheduleBatch, generateWeeklyPosts } from '../controllers/contentController';
+import { generatePost, analyzeContent, generateCalendar, getPosts, savePost, savePostsBatch, updatePost, deletePost, uploadAndGeneratePosts, scheduleBatch, generateWeeklyPosts } from '../controllers/contentController';
 import { generateCarousel, saveCarousel, listCarousels, updateCarousel, deleteCarousel, publishCarousel, downloadCarouselPdf } from '../controllers/carouselController';
 import { generatePostImage, generateImageOptions } from '../controllers/imageController';
 import { upload } from '../services/upload';
@@ -19,6 +19,7 @@ router.post('/generate-image', generatePostImage);
 router.post('/generate-image-options', generateImageOptions);
 router.get('/posts', getPosts);
 router.post('/posts', savePost);
+router.post('/posts/batch', savePostsBatch);
 router.patch('/posts/:id', updatePost);
 router.delete('/posts/:id', deletePost);
 router.post('/posts/schedule-batch', scheduleBatch);
