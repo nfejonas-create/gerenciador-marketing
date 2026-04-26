@@ -13,6 +13,7 @@ import contentGeneratorRoutes, { reloadJobsOnStartup } from './routes/contentGen
 import { errorHandler } from './middleware/errorHandler';
 import './services/passport';
 import './services/schedulerService';
+import { initAutoTestScheduler } from './services/autoTestService';
 
 dotenv.config();
 
@@ -64,5 +65,24 @@ app.use(errorHandler);
 
 // Recarregar jobs de agendamento ao iniciar
 reloadJobsOnStartup().catch(err => console.error('[Startup] Erro ao recarregar jobs:', err));
+
+// Inicializar auto-teste (a cada 5 dias)
+initAutoTestScheduler();
+
+// Endpoint para executar teste manualmente (apenas admin)
+app.post('/admin/run-auto-test', async (req: any, res: any) => {
+  const { secret } = req.body;
+  if (secret !== (process.env.SETUP_SECRET || 'setup-secret-2026')) {
+    return res.status(403).json({ error: 'Acesso negado' });
+  }
+  
+  try {
+    const { runAutoTest } = await import('./services/autoTestService');
+    const result = await runAutoTest();
+    return res.json({ ok: true, result });
+  } catch (e: any) {
+    return res.status(500).json({ error: e.message });
+  }
+});
 
 app.listen(PORT, () => console.log(`Backend rodando na porta ${PORT}`));
