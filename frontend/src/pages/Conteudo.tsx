@@ -334,20 +334,42 @@ export default function Conteudo() {
     if (weeklyPosts.length === 0) return;
     setSavingWeekly(true);
     try {
-      for (const p of weeklyPosts) {
-        await api.post('/content/posts', {
+      const postsToSave = weeklyPosts.map((p, i) => {
+        const scheduledAt = weeklySchedules[i];
+        return {
           platform: weeklyPlatform,
           content: p.content,
           cta: p.cta || null,
           hashtags: Array.isArray(p.hashtags) ? p.hashtags.join(' ') : (p.hashtags || null),
-          status: 'draft',
-        });
+          status: scheduledAt ? 'scheduled' : 'draft',
+          scheduledAt: scheduledAt || null,
+        };
+      });
+
+      // Salvar em lote se possível, senão um por um
+      try {
+        await api.post('/content/posts/batch', { posts: postsToSave });
+      } catch {
+        // Fallback: salvar um por um
+        for (const post of postsToSave) {
+          await api.post('/content/posts', post);
+        }
       }
-      alert(`${weeklyPosts.length} posts salvos como rascunho no Historico! Acesse a aba Historico para agendar ou publicar.`);
+
+      const scheduledCount = postsToSave.filter(p => p.status === 'scheduled').length;
+      const draftCount = postsToSave.length - scheduledCount;
+
+      alert(
+        `${postsToSave.length} posts salvos!\n` +
+        `${scheduledCount} agendados\n` +
+        `${draftCount} como rascunho`
+      );
+
       setShowWeeklyModal(false);
       setWeeklyPosts([]);
       setWeeklyTopic('');
       setWeeklyStep('config');
+      setWeeklySchedules({});
       if (tab === 'posts') loadPosts();
     } catch (e: any) {
       alert(e.response?.data?.error || 'Erro ao salvar posts');
