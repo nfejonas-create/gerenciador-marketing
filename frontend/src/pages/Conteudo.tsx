@@ -1,4 +1,6 @@
-﻿import { useState, useEffect, useRef } from 'react';
+﻿.trigger-build-$(date +%s)
+
+import { useState, useEffect, useRef } from 'react';
 import {
   Sparkles, Save, Clock, CheckCircle, Upload, FileText, Image as ImageIcon,
   X, Send, Calendar, ChevronDown, Package, Zap, BookOpen, Star, Target,
