@@ -1,0 +1,6 @@
+# Force Vercel to rebuild without cache
+# Timestamp: $(date +%s)
+.git
+node_modules/
+.next/
+.vercel/
