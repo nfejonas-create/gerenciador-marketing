@@ -435,7 +435,7 @@ export default function Conteudo() {
           <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-md space-y-5">
             <div className="flex items-center justify-between">
               <h3 className="text-white font-semibold">
-                {publishModal.post.status === 'scheduled' ? 'Reagendar post' : 'Publicar / Agendar'}
+                {publishModal.post.status === 'scheduled' ? 'Reagenda' : 'Publicar / Agendar'}
               </h3>
               <button onClick={() => setPublishModal(null)} className="text-gray-500 hover:text-gray-300"><X size={18} /></button>
             </div>
