@@ -6,6 +6,14 @@ import {
 } from 'lucide-react';
 import api from '../services/api';
 
+function fmtDate(iso?: string) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('pt-BR', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+}
+
 const TONES = [
   { value: 'tecnico', label: 'Tecnico', icon: BookOpen, desc: 'Preciso e detalhado' },
   { value: 'curiosidade', label: 'Curiosidade', icon: Zap, desc: 'Provoca reflexao' },
@@ -347,6 +355,13 @@ export default function Conteudo() {
       setSavingWeekly(false);
     }
   }
+
+  // Lógica de filtro para posts
+  const filteredPosts = posts.filter(p => {
+    const statusOk = filterStatus === 'all' || p.status === filterStatus;
+    const platOk = filterPlatform === 'all' || p.platform === filterPlatform;
+    return statusOk && platOk;
+  });
 
   // ─── MODALS ─────────────────────────────────────────────────────────────────
 
@@ -892,22 +907,47 @@ export default function Conteudo() {
       {/* ── ABA: HISTORICO ── */}
       {tab === 'posts' && (
         <div className="space-y-4">
-          <div className="flex flex-wrap gap-3 items-center justify-between">
-            <p className="text-gray-400 text-sm">{posts.length} post{posts.length !== 1 ? 's' : ''} salvos</p>
-            <div className="flex gap-2 flex-wrap">
-              <button onClick={() => { setShowWeeklyModal(true); setWeeklyStep('config'); setWeeklyPosts([]); }}
-                className="flex items-center gap-2 bg-blue-700 hover:bg-blue-600 text-white text-sm px-4 py-2 rounded-lg transition-colors">
-                <LayoutList size={14} /> Gerar semana
-              </button>
-              <button onClick={() => setShowBatchModal(true)}
-                className="flex items-center gap-2 bg-purple-700 hover:bg-purple-600 text-white text-sm px-4 py-2 rounded-lg transition-colors">
-                <CalendarDays size={14} /> Agendar rascunhos
-              </button>
+          {/* Filtros */}
+          <div className="rounded-xl border border-gray-700 bg-gray-800/60 p-4">
+            <p className="text-white text-sm font-medium mb-3">Filtros do historico</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Plataforma</label>
+                <select value={filterPlatform} onChange={e => setFilterPlatform(e.target.value)}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
+                  <option value="all">Todas plataformas</option>
+                  <option value="linkedin">LinkedIn</option>
+                  <option value="facebook">Facebook</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Status</label>
+                <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
+                  <option value="all">Todos status</option>
+                  <option value="published">Publicados</option>
+                  <option value="scheduled">Agendados</option>
+                  <option value="draft">Rascunhos</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-3 items-center justify-between">
+              <p className="text-gray-400 text-sm">{filteredPosts.length} post{filteredPosts.length !== 1 ? 's' : ''} filtrado{filteredPosts.length !== 1 ? 's' : ''}</p>
+              <div className="flex gap-2 flex-wrap">
+                <button onClick={() => { setShowWeeklyModal(true); setWeeklyStep('config'); setWeeklyPosts([]); }}
+                  className="flex items-center gap-2 bg-blue-700 hover:bg-blue-600 text-white text-sm px-4 py-2 rounded-lg transition-colors">
+                  <LayoutList size={14} /> Gerar semana
+                </button>
+                <button onClick={() => setShowBatchModal(true)}
+                  className="flex items-center gap-2 bg-purple-700 hover:bg-purple-600 text-white text-sm px-4 py-2 rounded-lg transition-colors">
+                  <CalendarDays size={14} /> Agendar rascunhos
+                </button>
+              </div>
             </div>
           </div>
 
-          {posts.length === 0 && <p className="text-gray-500 text-center py-8">Nenhum post salvo ainda.</p>}
-          {posts.map(post => (
+          {filteredPosts.length === 0 && <p className="text-gray-500 text-center py-8">Nenhum post encontrado com esses filtros.</p>}
+          {filteredPosts.map(post => (
             <div key={post.id} className="bg-gray-900 border border-gray-800 rounded-xl p-5">
               <div className="flex items-center justify-between mb-3">
                 <span className={`text-xs px-2 py-1 rounded-full ${post.platform === 'linkedin' ? 'bg-blue-900 text-blue-300' : 'bg-indigo-900 text-indigo-300'}`}>{post.platform}</span>
