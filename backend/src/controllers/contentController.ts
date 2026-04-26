@@ -8,6 +8,59 @@ import { searchKnowledgeForTopic } from './knowledgeController';
 const prisma = new PrismaClient();
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+function normalizeWeeklyPostsResult(raw: any) {
+  const posts = Array.isArray(raw?.posts) ? raw.posts : [];
+  return {
+    posts: posts
+      .map((post: any, index: number) => ({
+        day: String(post?.day || ['Segunda', 'Terca', 'Quarta', 'Quinta', 'Sexta', 'Sabado', 'Domingo'][index] || 'Segunda'),
+        suggestedTime: String(post?.suggestedTime || '08:00'),
+        angle: String(post?.angle || 'pratico'),
+        content: String(post?.content || '').trim(),
+        cta: String(post?.cta || '').trim(),
+        hashtags: typeof post?.hashtags === 'string'
+          ? post.hashtags.trim()
+          : Array.isArray(post?.hashtags)
+            ? post.hashtags.join(' ').trim()
+            : '',
+      }))
+      .filter((post: any) => post.content.length > 20),
+  };
+}
+
+function parseWeeklyPostsResponse(text: string) {
+  const cleanedText = text
+    .replace(/```json/gi, '')
+    .replace(/```/g, '')
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .trim();
+
+  const candidates: string[] = [];
+  const objectMatch = cleanedText.match(/\{[\s\S]*\}/);
+  if (objectMatch) candidates.push(objectMatch[0]);
+
+  const arrayMatch = cleanedText.match(/\[[\s\S]*\]/);
+  if (arrayMatch) candidates.push(`{"posts":${arrayMatch[0]}}`);
+
+  candidates.push(cleanedText);
+
+  for (const candidate of candidates) {
+    const normalizedCandidate = candidate
+      .replace(/,\s*([}\]])/g, '$1')
+      .replace(/\u0000/g, '')
+      .trim();
+
+    try {
+      const parsed = JSON.parse(normalizedCandidate);
+      const normalized = normalizeWeeklyPostsResult(parsed);
+      if (normalized.posts.length > 0) return normalized;
+    } catch {}
+  }
+
+  throw new Error('JSON invalido retornado pela IA');
+}
+
 async function extractTextFromFile(buffer: Buffer, mimetype: string): Promise<string> {
   const base64 = buffer.toString('base64');
 
@@ -455,6 +508,10 @@ ${kbContext}
 - "cta" = chamada para acao (inclua link no post 7 se houver produto)
 - GERE HASHTAGS CONTEXTUAIS baseadas no tema de cada post
 - Horarios sugeridos: 8h, 9h, 10h, 12h, 17h, 18h, 19h
+- NUNCA escreva texto antes ou depois do JSON
+- NUNCA use markdown, observacoes ou comentarios
+- Todas as strings devem estar entre aspas duplas validas JSON
+- Retorne apenas um objeto JSON com a chave "posts"
 
 Retorne SOMENTE JSON valido:
 {
@@ -478,22 +535,13 @@ Retorne SOMENTE JSON valido:
     });
 
     const text = response.content[0].type === 'text' ? response.content[0].text : '{}';
-    
-    // Extrair apenas o JSON da resposta (pode ter texto antes/depois)
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      console.error('[generateWeeklyPosts] Nenhum JSON encontrado na resposta:', text.substring(0, 500));
-      return res.status(500).json({ error: 'IA nao retornou JSON valido' });
-    }
-    
-    const clean = jsonMatch[0].replace(/```json|```/g, '').trim();
-    
+
     try {
-      const result = JSON.parse(clean);
+      const result = parseWeeklyPostsResponse(text);
       return res.json(result);
     } catch (parseError: any) {
       console.error('[generateWeeklyPosts] Erro ao fazer parse do JSON:', parseError.message);
-      console.error('[generateWeeklyPosts] Texto limpo:', clean.substring(0, 1000));
+      console.error('[generateWeeklyPosts] Resposta bruta:', text.substring(0, 1500));
       return res.status(500).json({ error: 'JSON invalido retornado pela IA' });
     }
   } catch (err: any) {

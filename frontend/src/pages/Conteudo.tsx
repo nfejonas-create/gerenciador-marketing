@@ -968,45 +968,54 @@ export default function Conteudo() {
       {/* ── ABA: HISTORICO ── */}
       {tab === 'posts' && (
         <div className="space-y-4">
-          {/* Filtros */}
-          <div className="flex flex-wrap gap-3 items-center justify-between bg-gray-900 border border-gray-800 rounded-xl p-4">
-            <div className="flex items-center gap-2">
-              <span className="text-gray-400 text-sm">{filteredPosts.length} post{filteredPosts.length !== 1 ? 's' : ''} filtrado{filteredPosts.length !== 1 ? 's' : ''}</span>
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <span className="text-gray-400 text-sm">
+                {filteredPosts.length} post{filteredPosts.length !== 1 ? 's' : ''} filtrado{filteredPosts.length !== 1 ? 's' : ''}
+              </span>
+              <div className="flex gap-2 flex-wrap">
+                <button onClick={() => { setShowWeeklyModal(true); setWeeklyStep('config'); setWeeklyPosts([]); }}
+                  className="flex items-center gap-2 bg-blue-700 hover:bg-blue-600 text-white text-sm px-4 py-2 rounded-lg transition-colors">
+                  <LayoutList size={14} /> Gerar semana
+                </button>
+                <button onClick={() => setShowRecurringModal(true)}
+                  className="flex items-center gap-2 bg-indigo-700 hover:bg-indigo-600 text-white text-sm px-4 py-2 rounded-lg transition-colors">
+                  <CalendarDays size={14} /> Recorrente
+                </button>
+                <button onClick={() => setShowBatchModal(true)}
+                  className="flex items-center gap-2 bg-purple-700 hover:bg-purple-600 text-white text-sm px-4 py-2 rounded-lg transition-colors">
+                  <CalendarDays size={14} /> Agendar rascunhos
+                </button>
+              </div>
             </div>
-            <div className="flex gap-2 flex-wrap">
-              <select 
-                value={filterPlatform} 
-                onChange={e => setFilterPlatform(e.target.value)}
-                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
-              >
-                <option value="all">Todas plataformas</option>
-                <option value="linkedin">LinkedIn</option>
-                <option value="facebook">Facebook</option>
-              </select>
-              
-              <select 
-                value={filterStatus} 
-                onChange={e => setFilterStatus(e.target.value)}
-                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
-              >
-                <option value="all">Todos status</option>
-                <option value="published">Publicados</option>
-                <option value="scheduled">Agendados</option>
-                <option value="draft">Rascunhos</option>
-              </select>
-              
-              <button onClick={() => { setShowWeeklyModal(true); setWeeklyStep('config'); setWeeklyPosts([]); }}
-                className="flex items-center gap-2 bg-blue-700 hover:bg-blue-600 text-white text-sm px-4 py-2 rounded-lg transition-colors">
-                <LayoutList size={14} /> Gerar semana
-              </button>
-              <button onClick={() => setShowRecurringModal(true)}
-                className="flex items-center gap-2 bg-indigo-700 hover:bg-indigo-600 text-white text-sm px-4 py-2 rounded-lg transition-colors">
-                <CalendarDays size={14} /> Recorrente
-              </button>
-              <button onClick={() => setShowBatchModal(true)}
-                className="flex items-center gap-2 bg-purple-700 hover:bg-purple-600 text-white text-sm px-4 py-2 rounded-lg transition-colors">
-                <CalendarDays size={14} /> Agendar rascunhos
-              </button>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Plataforma</label>
+                <select
+                  value={filterPlatform}
+                  onChange={e => setFilterPlatform(e.target.value)}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
+                >
+                  <option value="all">Todas plataformas</option>
+                  <option value="linkedin">LinkedIn</option>
+                  <option value="facebook">Facebook</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Status</label>
+                <select
+                  value={filterStatus}
+                  onChange={e => setFilterStatus(e.target.value)}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
+                >
+                  <option value="all">Todos status</option>
+                  <option value="published">Publicados</option>
+                  <option value="scheduled">Agendados</option>
+                  <option value="draft">Rascunhos</option>
+                </select>
+              </div>
             </div>
           </div>
 
