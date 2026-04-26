@@ -1,5 +1,4 @@
-﻿.trigger-build-$(date +%s)
-
+// Rebuild v2 - deploying history filters properly
 import { useState, useEffect, useRef } from 'react';
 import {
   Sparkles, Save, Clock, CheckCircle, Upload, FileText, Image as ImageIcon,
