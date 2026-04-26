@@ -104,3 +104,52 @@ export async function getLinkedInProfileMetrics(req: AuthRequest, res: Response)
     note: 'Para métricas completas, conecte uma conta LinkedIn Company Page',
   });
 }
+
+// ─── Receber métricas do LinkedIn via bookmarklet/script ─────────────────────
+
+export async function receiveLinkedInMetrics(req: AuthRequest, res: Response) {
+  try {
+    const { 
+      plataforma, 
+      perfil, 
+      visualizacoes, 
+      recrutadores, 
+      posts, 
+      seguidores, 
+      engajamento,
+      data,
+      url 
+    } = req.body;
+
+    // Validar dados mínimos
+    if (!plataforma || plataforma !== 'LinkedIn') {
+      return res.status(400).json({ error: 'Dados inválidos ou plataforma não suportada' });
+    }
+
+    // Salvar métricas no banco
+    const metric = await prisma.metric.create({
+      data: {
+        userId: req.effectiveUserId!,
+        platform: 'linkedin',
+        views: parseInt(visualizacoes) || 0,
+        likes: parseInt(engajamento) || 0,
+        followers: parseInt(seguidores) || 0,
+        date: data ? new Date(data) : new Date(),
+      },
+    });
+
+    return res.json({ 
+      success: true, 
+      message: 'Métricas do LinkedIn sincronizadas com sucesso',
+      metric: {
+        id: metric.id,
+        visualizacoes: metric.views,
+        seguidores: metric.followers,
+        data: metric.date,
+      }
+    });
+  } catch (err: any) {
+    console.error('[receiveLinkedInMetrics]', err);
+    return res.status(500).json({ error: err.message || 'Erro ao salvar métricas' });
+  }
+}

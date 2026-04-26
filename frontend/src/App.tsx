@@ -30,6 +30,7 @@ import AuthCallback from './pages/AuthCallback';
 import BaseConhecimento from './pages/BaseConhecimento';
 import ContentGenerator from './pages/ContentGenerator';
 import SocialMetrics from './pages/SocialMetrics';
+import LinkedInExtractor from './pages/LinkedInExtractor';
 import Layout from './components/Layout';
 import AdminUsers from './pages/admin/Users';
 
@@ -62,6 +63,7 @@ export default function App() {
             <Route path="funil" element={<Funil />} />
             <Route path="calendario" element={<Calendario />} />
             <Route path="metricas" element={<SocialMetrics />} />
+            <Route path="linkedin-extrator" element={<LinkedInExtractor />} />
             <Route path="configuracoes" element={<Configuracoes />} />
             <Route path="admin/users" element={<AdminRoute><AdminUsers /></AdminRoute>} />
           </Route>
