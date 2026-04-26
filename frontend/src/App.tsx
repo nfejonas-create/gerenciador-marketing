@@ -29,6 +29,7 @@ import Configuracoes from './pages/Configuracoes';
 import AuthCallback from './pages/AuthCallback';
 import BaseConhecimento from './pages/BaseConhecimento';
 import ContentGenerator from './pages/ContentGenerator';
+import SocialMetrics from './pages/SocialMetrics';
 import Layout from './components/Layout';
 import AdminUsers from './pages/admin/Users';
 
@@ -60,6 +61,7 @@ export default function App() {
             <Route path="gerador-conteudo" element={<ContentGenerator />} />
             <Route path="funil" element={<Funil />} />
             <Route path="calendario" element={<Calendario />} />
+            <Route path="metricas" element={<SocialMetrics />} />
             <Route path="configuracoes" element={<Configuracoes />} />
             <Route path="admin/users" element={<AdminRoute><AdminUsers /></AdminRoute>} />
           </Route>

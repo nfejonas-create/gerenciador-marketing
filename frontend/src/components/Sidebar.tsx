@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, FileText, Images, TrendingUp, Calendar, Settings, LogOut, Zap, Database, Users, Sparkles } from 'lucide-react';
+import { LayoutDashboard, FileText, Images, TrendingUp, Calendar, Settings, LogOut, Zap, Database, Users, Sparkles, BarChart3 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import UserSwitcher from './UserSwitcher';
 
@@ -11,6 +11,7 @@ const links = [
   { to: '/base-conhecimento', icon: Database, label: 'Base de Conhecimento' },
   { to: '/funil', icon: TrendingUp, label: 'Funil de Vendas' },
   { to: '/calendario', icon: Calendar, label: 'Calendario' },
+  { to: '/metricas', icon: BarChart3, label: 'Metricas' },
   { to: '/configuracoes', icon: Settings, label: 'Configuracoes' },
 ];
 
