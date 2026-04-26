@@ -1,5 +1,4 @@
-// Rebuild v2 - deploying history filters properly
-import { useState, useEffect, useRef } from 'react';
+// Force Vercel rebuild v3 - $(date +%s)import { useState, useEffect, useRef } from 'react';
 import {
   Sparkles, Save, Clock, CheckCircle, Upload, FileText, Image as ImageIcon,
   X, Send, Calendar, ChevronDown, Package, Zap, BookOpen, Star, Target,
