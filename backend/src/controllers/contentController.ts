@@ -478,9 +478,24 @@ Retorne SOMENTE JSON valido:
     });
 
     const text = response.content[0].type === 'text' ? response.content[0].text : '{}';
-    const clean = text.replace(/```json|```/g, '').trim();
-    const result = JSON.parse(clean);
-    return res.json(result);
+    
+    // Extrair apenas o JSON da resposta (pode ter texto antes/depois)
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.error('[generateWeeklyPosts] Nenhum JSON encontrado na resposta:', text.substring(0, 500));
+      return res.status(500).json({ error: 'IA nao retornou JSON valido' });
+    }
+    
+    const clean = jsonMatch[0].replace(/```json|```/g, '').trim();
+    
+    try {
+      const result = JSON.parse(clean);
+      return res.json(result);
+    } catch (parseError: any) {
+      console.error('[generateWeeklyPosts] Erro ao fazer parse do JSON:', parseError.message);
+      console.error('[generateWeeklyPosts] Texto limpo:', clean.substring(0, 1000));
+      return res.status(500).json({ error: 'JSON invalido retornado pela IA' });
+    }
   } catch (err: any) {
     return res.status(500).json({ error: err.message || 'Erro ao gerar posts semanais' });
   }
@@ -526,8 +541,19 @@ Retorne SOMENTE JSON:
     });
 
     const text = response.content[0].type === 'text' ? response.content[0].text : '{}';
-    const result = JSON.parse(text.replace(/```json|```/g, '').trim());
-    return res.json({ filename: originalname, type: mimetype, extractedLength: extractedText.length, ...result });
+    
+    // Extrair apenas o JSON da resposta
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      return res.status(500).json({ error: 'IA nao retornou JSON valido' });
+    }
+    
+    try {
+      const result = JSON.parse(jsonMatch[0].replace(/```json|```/g, '').trim());
+      return res.json({ filename: originalname, type: mimetype, extractedLength: extractedText.length, ...result });
+    } catch (parseError: any) {
+      return res.status(500).json({ error: 'JSON invalido retornado pela IA' });
+    }
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
