@@ -244,13 +244,16 @@ export default function ContentGenerator() {
                   />
                   
                   <div className="flex items-center gap-2 text-xs text-blue-400">
-                    {generated[s.id].hashtags.map((h, i) => <span key={i}>{h}</span>)}
+                    {(Array.isArray(generated[s.id].hashtags)
+                      ? generated[s.id].hashtags
+                      : ((generated[s.id].hashtags as unknown) as string).split(' ')
+                    ).map((h: string, i: number) => <span key={i}>{h}</span>)}
                     <span className="text-gray-500">· {generated[s.id].readTime} min de leitura</span>
                   </div>
 
                   <div className="flex gap-2 pt-2">
                     <button
-                      onClick={() => copyText(generated[s.id].text + '\n\n' + generated[s.id].hashtags.join(' '))}
+                      onClick={() => copyText(generated[s.id].text + '\n\n' + (typeof generated[s.id].hashtags === 'string' ? generated[s.id].hashtags : generated[s.id].hashtags.join(' ')))}
                       className="flex items-center gap-1 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded text-xs"
                     >
                       <Copy size={12} /> Copiar
