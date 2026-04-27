@@ -1017,6 +1017,21 @@ export default function Conteudo() {
                     <Send size={13} /> {post.status === 'scheduled' ? 'Reagendar' : 'Publicar / Agendar'}
                   </button>
                 )}
+                {post.status === 'scheduled' && (
+                  <button onClick={async () => {
+                    if (!confirm('Cancelar agendamento? O post voltará para rascunho.')) return;
+                    try {
+                      await api.patch(`/content/posts/${post.id}`, { status: 'draft', scheduledAt: null });
+                      alert('Agendamento cancelado!');
+                      loadPosts();
+                    } catch (e: any) {
+                      alert(e.response?.data?.error || 'Erro ao cancelar');
+                    }
+                  }}
+                    className="flex items-center gap-1.5 bg-red-700 hover:bg-red-600 text-white text-sm px-3 py-1.5 rounded-lg transition-colors">
+                    <X size={13} /> Cancelar
+                  </button>
+                )}
               </div>
             </div>
           ))}
