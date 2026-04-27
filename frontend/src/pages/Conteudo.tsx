@@ -757,7 +757,10 @@ export default function Conteudo() {
                   )}
                   {generated.hashtags && (
                     <div className="flex flex-wrap gap-2">
-                      {generated.hashtags.map((h: string, i: number) => (
+                      {(Array.isArray(generated.hashtags)
+                        ? generated.hashtags
+                        : ((generated.hashtags as unknown) as string).split(' ')
+                      ).map((h: string, i: number) => (
                         <span key={i} className="bg-gray-800 text-blue-400 text-xs px-2 py-1 rounded">{h}</span>
                       ))}
                     </div>
