@@ -10,6 +10,7 @@ import contentRoutes from './routes/content';
 import funnelRoutes from './routes/funnel';
 import knowledgeRoutes from './routes/knowledge';
 import contentGeneratorRoutes, { reloadJobsOnStartup } from './routes/contentGeneratorRoutes';
+import generatedContentRoutes from './routes/generatedContentRoutes';
 import { errorHandler } from './middleware/errorHandler';
 import './services/passport';
 import './services/schedulerService';
@@ -51,6 +52,7 @@ app.use('/content-generator', contentGeneratorRoutes);
 app.use('/funnel', funnelRoutes);
 app.use('/knowledge', knowledgeRoutes);
 
+app.use('/content', generatedContentRoutes);
 app.get('/health', (_req, res) => res.json({ status: 'ok', serverTime: new Date().toISOString() }));
 
 // Endpoint temporário - define senha para conta OAuth
