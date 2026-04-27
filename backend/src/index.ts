@@ -6,8 +6,11 @@ import authRoutes from './routes/auth';
 import adminRoutes from './routes/admin';
 import socialRoutes from './routes/social';
 import metricsRoutes from './routes/metrics';
-import functionRouter from "./routes/funcion";
-import knowledgeRouter from "./routes/knowledge";
+import contentRoutes from './routes/content';
+import knowledgeRoutes from './routes/knowledge';
+import funnelRoutes from './routes/funnel';
+import generatedContentRoutes from './routes/generatedContentRoutes';
+import { errorHandler } from './middleware/errorHandler';
 import './services/passport';
 import './services/schedulerService';
 import { initAutoTestScheduler } from './services/autoTestService';
@@ -44,11 +47,9 @@ app.use('/admin', adminRoutes);
 app.use('/social', socialRoutes);
 app.use('/metrics', metricsRoutes);
 app.use('/content', contentRoutes);
-app.use('/content-generator', contentGeneratorRoutes);
-app.use('/funnel', funnelRoutes);
 app.use('/knowledge', knowledgeRoutes);
+app.use('/funnel', funnelRoutes);
 
-app.use('/content', generatedContentRoutes);
 app.get('/health', (_req, res) => res.json({ status: 'ok', serverTime: new Date().toISOString() }));
 
 // Endpoint temporário - define senha para conta OAuth
@@ -80,7 +81,7 @@ app.post('/setup/make-admin', async (req: any, res: any) => {
 app.use(errorHandler);
 
 // Recarregar jobs de agendamento ao iniciar
-reloadJobsOnStartup().catch(err => console.error('[Startup] Erro ao recarregar jobs:', err));
+// reloadJobsOnStartup().catch(err => console.error('[Startup] Erro ao recarregar jobs:', err));
 
 // Inicializar auto-teste (a cada 5 dias)
 initAutoTestScheduler();

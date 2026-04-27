@@ -66,7 +66,7 @@ async function resolveLinkedInPersonId(accessToken: string): Promise<string> {
 
 async function postToLinkedIn(accessToken: string, fullText: string, savedMemberId?: string | null): Promise<string> {
   // Tentativa 1: usar memberId salvo diretamente (mais confiável)
-  if (savedMemberId && /^\d+$/.test(savedMemberId.trim())) {
+  if (savedMemberId && savedMemberId.trim().length > 0) {
     try {
       const personId = savedMemberId.trim();
       const author = `urn:li:person:${personId}`;

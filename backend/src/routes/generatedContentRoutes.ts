@@ -12,7 +12,7 @@ router.post('/generate', async (req: Request, res: Response) => {
           if (!headline) return res.status(400).json({ error: 'Missing headline' });
 
           const draft = await prisma.generatedContent.create({
-                  data: { userId, headline, content: content || '', status: 'rascunho' }
+                  data: { userId, text: content || '', template: 'post', status: 'draft', suggestionId: 'manual-' + Date.now(), hashtags: [] }
           });
 
           res.status(201).json({ success: true, data: draft });
@@ -56,7 +56,7 @@ router.patch('/history/:id', async (req: Request, res: Response) => {
 
           const updated = await prisma.generatedContent.update({
                   where: { id },
-                  data: { headline: headline || undefined, content: content || undefined }
+                  data: { text: content || undefined }
           });
           res.json({ success: true, data: updated });
     } catch (error) {
