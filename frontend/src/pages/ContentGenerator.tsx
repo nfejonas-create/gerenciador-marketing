@@ -264,7 +264,14 @@ export default function ContentGenerator() {
                     </button>
                     
                     <button
-                      onClick={() => alert('Postado! (implementar)')}
+                      onClick={async () => {
+                        try {
+                          await api.post('/content/publish', { postId: generated[s.id].id });
+                          alert('Post publicado com sucesso!');
+                        } catch (e: any) {
+                          alert(e.response?.data?.error || 'Erro ao publicar');
+                        }
+                      }}
                       className="flex items-center gap-1 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded text-xs"
                     >
                       <Send size={12} /> Postar agora
