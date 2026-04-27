@@ -715,6 +715,19 @@ export default function Conteudo() {
               className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white py-3 rounded-xl font-medium transition-colors">
               <Sparkles size={16} /> {loadingGen ? 'Gerando post...' : 'Gerar com IA'}
             </button>
+
+            <div className="border-t border-gray-700 pt-5 mt-5">
+              <h3 className="font-semibold text-white mb-3 flex items-center gap-2">
+                <CalendarDays size={16} className="text-green-400" />
+                Gerar Semana Completa
+              </h3>
+              <p className="text-xs text-gray-400 mb-3">Gere automaticamente posts para toda a semana (7 dias)</p>
+              <button onClick={() => { setShowWeeklyModal(true); setWeeklyStep('config'); setWeeklyPosts([]); setWeeklyTopic(topic); }}
+                disabled={loadingWeekly}
+                className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white py-3 rounded-xl font-medium transition-colors">
+                <LayoutList size={16} /> {loadingWeekly ? 'Gerando...' : 'Gerar 7 posts da semana'}
+              </button>
+            </div>
           </div>
 
           {(generated || loadingGen) && (
@@ -973,10 +986,21 @@ export default function Conteudo() {
           {filteredPosts.map(post => (
             <div key={post.id} className="bg-gray-900 border border-gray-800 rounded-xl p-5">
               <div className="flex items-center justify-between mb-3">
-                <span className={`text-xs px-2 py-1 rounded-full ${post.platform === 'linkedin' ? 'bg-blue-900 text-blue-300' : 'bg-indigo-900 text-indigo-300'}`}>{post.platform}</span>
+                <div className="flex items-center gap-2">
+                  <span className={`text-xs px-2 py-1 rounded-full ${post.platform === 'linkedin' ? 'bg-blue-900 text-blue-300' : 'bg-indigo-900 text-indigo-300'}`}>{post.platform}</span>
+                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                    post.status === 'draft' ? 'bg-yellow-600 text-yellow-100' :
+                    post.status === 'scheduled' ? 'bg-blue-600 text-blue-100' :
+                    'bg-green-600 text-green-100'
+                  }`}>
+                    {post.status === 'draft' ? '🟡 RASCUNHO' :
+                     post.status === 'scheduled' ? '🔵 AGENDADO' :
+                     '🟢 PUBLICADO'}
+                  </span>
+                </div>
                 <span className={`text-xs flex items-center gap-1 ${post.status === 'published' ? 'text-green-400' : post.status === 'scheduled' ? 'text-yellow-400' : 'text-gray-500'}`}>
                   {post.status === 'published' ? <CheckCircle size={12} /> : <Clock size={12} />}
-                  {post.status === 'draft' ? 'Rascunho' : post.status === 'scheduled' ? `Agendado${post.scheduledAt ? ' · ' + new Date(post.scheduledAt).toLocaleString('pt-BR') : ''}` : 'Publicado'}
+                  {post.scheduledAt ? new Date(post.scheduledAt).toLocaleString('pt-BR') : ''}
                 </span>
               </div>
               {post.imageUrl && <img src={post.imageUrl} alt="" className="w-full h-32 object-cover rounded-lg mb-3" />}
