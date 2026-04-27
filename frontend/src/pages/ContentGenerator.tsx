@@ -266,7 +266,16 @@ export default function ContentGenerator() {
                     <button
                       onClick={async () => {
                         try {
-                          await api.post('/content/publish', { postId: generated[s.id].id });
+                          // Primeiro salva o post no banco
+                          const postToSave = generated[s.id];
+                          const { data: savedPost } = await api.post('/content/posts', {
+                            platform: 'linkedin',
+                            content: postToSave.text,
+                            hashtags: postToSave.hashtags.join(' '),
+                            status: 'draft',
+                          });
+                          // Depois publica usando o ID real
+                          await api.post('/content/publish', { postId: savedPost.id });
                           alert('Post publicado com sucesso!');
                         } catch (e: any) {
                           alert(e.response?.data?.error || 'Erro ao publicar');
