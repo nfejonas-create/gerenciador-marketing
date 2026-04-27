@@ -68,8 +68,58 @@ router.get('/suggestions', async (req: AuthRequest, res: Response) => {
       res.json({ source, date: targetDate, suggestions: withIds, fromCache: false });
     } catch (err: any) {
     console.error('[GET /suggestions]', err);
-          res.status(500).json({ error: 'Erro ao buscar sugestoes', details: err.message });
+          73
+              , details: err.message });
     }
+});
+
+// POST /content/generate - Gera conteúdo e SEMPRE salva em rascunho/histórico
+router.post('/generate', async (req: AuthRequest, res: Response) => {
+      try {
+              const { suggestionId, template = 'post' } = req.body;
+              const userId = req.effectiveUserId!;
+
+              if (!suggestionId) {
+                        return res.status(400).json({ error: 'suggestionId é obrigatório' });
+              }
+
+              // Buscar sugestão
+              const suggestion = await prisma.contentSuggestion.findFirst({
+                        where: { id: suggestionId, userId },
+              });
+
+              if (!suggestion) {
+                        return res.status(404).json({ error: 'Sugestão não encontrada' });
+              }
+
+              // Gerar conteúdo com IA
+              const result = await generateContent(userId, {
+                        headline: suggestion.headline,
+                        snippet: suggestion.snippet || '',
+                        template,
+              });
+
+              // ✅ SALVAR SEMPRE EM RASCUNHO/HISTÓRICO
+              const saved = await saveGeneratedContent(userId, suggestionId, result, template);
+
+              // Marcar sugestão como usada
+              await prisma.contentSuggestion.update({
+                        where: { id: suggestionId },
+                        data: { usedAt: new Date() },
+              });
+
+              res.json({
+                        id: saved.id,
+                        text: result.text,
+                        hashtags: result.hashtags,
+                        readTime: result.readTime,
+                        template,
+                        status: 'rascunho', // Sempre começa como rascunho
+              });
+      } catch (err: any) {
+              console.error('[POST /generate]', err);
+              res.status(500).json({ error: 'Erro ao gerar conteúdo', details: err.message });
+      }
 });
 
 // POST /content/generate
@@ -304,3 +354,103 @@ router.patch('/scheduled/:id', async (req: AuthRequest, res: Response) => {
 
 export default router;
 export { reloadJobsOnStartup };
+
+
+// ======================== HISTÓRICO / RASCUNHO ========================
+// GET /content/history - Lista todos os rascunhos/conteúdo gerado
+router.get('/history', async (req: AuthRequest, res: Response) => {
+      try {
+              const userId = req.effectiveUserId!;
+              const { status = 'rascunho' } = req.query as { status?: string };
+
+        const contents = await prisma.generatedContent.findMany({
+                  where: { userId, status },
+                  include: {
+                              suggestion: {
+                                            select: { headline: true, source: true },
+                              },
+                  },
+                  orderBy: { createdAt: 'desc' },
+        });
+
+        res.json(contents);
+      } catch (err: any) {
+    console.error('[GET /history]', err);
+              res.status(500).json({ error: 'Erro ao listar histórico', details: err.message });
+      }
+});
+
+// GET /content/history/:id - Busca um rascunho específico
+router.get('/history/:id', async (req: AuthRequest, res: Response) => {
+      try {
+              const { id } = req.params;
+              const userId = req.effectiveUserId!;
+
+        const content = await prisma.generatedContent.findFirst({
+                  where: { id, userId },
+        });
+
+        if (!content) {
+                  return res.status(404).json({ error: 'Conteúdo não encontrado' });
+        }
+
+        res.json(content);
+      } catch (err: any) {
+    console.error('[GET /history/:id]', err);
+              res.status(500).json({ error: 'Erro ao buscar conteúdo', details: err.message });
+      }
+});
+
+// PATCH /content/history/:id - Edita rascunho
+router.patch('/history/:id', async (req: AuthRequest, res: Response) => {
+      try {
+              const { id } = req.params;
+              const { text, hashtags, readTime } = req.body;
+              const userId = req.effectiveUserId!;
+
+        const content = await prisma.generatedContent.findFirst({
+                  where: { id, userId },
+        });
+
+        if (!content) {
+                  return res.status(404).json({ error: 'Conteúdo não encontrado' });
+        }
+
+        const updated = await prisma.generatedContent.update({
+                  where: { id },
+                  data: {
+                              ...(text && { text }),
+                              ...(hashtags && { hashtags }),
+                              ...(readTime && { readTime }),
+                  },
+        });
+
+        res.json({ ok: true, content: updated });
+      } catch (err: any) {
+    console.error('[PATCH /history/:id]', err);
+              res.status(500).json({ error: 'Erro ao editar conteúdo', details: err.message });
+      }
+});
+
+// DELETE /content/history/:id - Deleta rascunho
+router.delete('/history/:id', async (req: AuthRequest, res: Response) => {
+      try {
+              const { id } = req.params;
+              const userId = req.effectiveUserId!;
+
+        const content = await prisma.generatedContent.findFirst({
+                  where: { id, userId },
+        });
+
+        if (!content) {
+                  return res.status(404).json({ error: 'Conteúdo não encontrado' });
+        }
+
+        await prisma.generatedContent.delete({ where: { id } });
+
+        res.json({ ok: true, message: 'Conteúdo deletado' });
+      } catch (err: any) {
+    console.error('[DELETE /history/:id]', err);
+              res.status(500).json({ error: 'Erro ao deletar conteúdo', details: err.message });
+      }
+});
