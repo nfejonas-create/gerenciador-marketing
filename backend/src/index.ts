@@ -25,6 +25,7 @@ const allowedOrigins = [
   'http://localhost:3000',
   'https://frontend-six-lemon-74.vercel.app',
   'https://gerenciador-marketing-frontend.vercel.app',
+    'https://gerenciador-marketing-netlify.netlify.app',
   process.env.FRONTEND_URL,
 ].filter(Boolean);
 
