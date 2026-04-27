@@ -30,7 +30,8 @@ const prisma = new PrismaClient();
 router.use(authGuard);
 
 // GET /content/suggestions?source=google|linkedin&date=YYYY-MM-DD
-router.get('/suggestions', async (req: AuthRequest, res: Response) => {
+45
+    , async (req: AuthRequest, res: Response) => {
     try {
           const { source = 'google', date } = req.query as { source: 'google' | 'linkedin'; date?: string };
           const targetDate = date || dayjs.utc().subtract(1, 'day').format('YYYY-MM-DD');
@@ -43,6 +44,169 @@ router.get('/suggestions', async (req: AuthRequest, res: Response) => {
       });
           const settings = (user?.settings as any) || {};
           const niche = settings.niche || 'eletricista instalacao eletrica NBR 5410';
+
+        // POST /content/generate - Gera conteúdo com IA e salva em rascunho
+        router.post('/generate', async (req: AuthRequest, res: Response) => {
+              try {
+                      const { suggestionId, template } = req.body;
+                      const userId = req.effectiveUserId;
+
+                      if (!userId) {
+                                return res.status(401).json({ error: 'Usuário não autenticado' });
+                      }
+
+                      if (!suggestionId) {
+                                return res.status(400).json({ error: 'suggestionId é obrigatório' });
+                      }
+
+                      // Busca a sugestão
+                      const suggestion = await Suggestions.findOne({
+                                _id: suggestionId,
+                                userId
+                      });
+
+                      if (!suggestion) {
+                                return res.status(404).json({ error: 'Sugestão não encontrada' });
+                      }
+
+                 // Gera o conteúdo
+                      const headline = suggestion.headline || '';
+                      const snippet = suggestion.snippet || '';
+                      const niche = suggestion.niche || '';
+
+                      const generatedContent = await generateContent(headline, snippet, niche);
+
+                      // SEMPRE salva em GeneratedContent (rascunho)
+                      const draft = new GeneratedContent({
+                                userId,
+                                suggestionId,
+                                headline: generatedContent.headline,
+                                snippet: generatedContent.snippet,
+                                content: generatedContent.content,
+                                hashtags: generatedContent.hashtags,
+                                readTime: generatedContent.readTime,
+                                status: 'rascunho',
+                                template: template || 'padrão'
+                      });
+
+                      await draft.save();
+
+                      // Marca sugestão como usada
+                      await Suggestions.updateOne(
+                          { _id: suggestionId },
+                          { $set: { used: true } }
+                              );
+
+                      res.json({
+                                success: true,
+                                message: 'Conteúdo gerado e salvo em rascunho',
+                                content: draft
+                      });
+              } catch (error) {
+                      console.error('Erro ao gerar conteúdo:', error);
+                      res.status(500).json({ error: 'Erro ao gerar conteúdo' });
+              }
+        });
+
+        // GET /content/history - Lista rascunhos do usuário
+        router.get('/history', async (req: AuthRequest, res: Response) => {
+              try {
+                      const userId = req.effectiveUserId;
+
+                      if (!userId) {
+                                return res.status(401).json({ error: 'Usuário não autenticado' });
+                      }
+
+                      const history = await GeneratedContent.find({ userId }).sort({ createdAt: -1 });
+                      res.json(history);
+              } catch (error) {
+                      console.error('Erro ao buscar histórico:', error);
+                      res.status(500).json({ error: 'Erro ao buscar histórico' });
+              }
+        });
+
+        // GET /content/history/:id - Busca rascunho específico
+        router.get('/history/:id', async (req: AuthRequest, res: Response) => {
+              try {
+                      const userId = req.effectiveUserId;
+                      const { id } = req.params;
+
+                      if (!userId) {
+                                return res.status(401).json({ error: 'Usuário não autenticado' });
+                      }
+
+                      const content = await GeneratedContent.findOne({ _id: id, userId });
+
+                      if (!content) {
+                                return res.status(404).json({ error: 'Conteúdo não encontrado' });
+                      }
+
+                      res.json(content);
+              } catch (error) {
+                      console.error('Erro ao buscar conteúdo:', error);
+                      res.status(500).json({ error: 'Erro ao buscar conteúdo' });
+              }
+        });
+
+        // PATCH /content/history/:id - Edita rascunho
+        router.patch('/history/:id', async (req: AuthRequest, res: Response) => {
+              try {
+                      const userId = req.effectiveUserId;
+                      const { id } = req.params;
+                      const { headline, snippet, content, hashtags, readTime } = req.body;
+
+                      if (!userId) {
+                                return res.status(401).json({ error: 'Usuário não autenticado' });
+                      }
+
+                      const updated = await GeneratedContent.findOneAndUpdate(
+                          { _id: id, userId },
+                          {
+                                      $set: {
+                                                    headline: headline || undefined,
+                                                    snippet: snippet || undefined,
+                                                    content: content || undefined,
+                                                    hashtags: hashtags || undefined,
+                                                    readTime: readTime || undefined,
+                                                    updatedAt: new Date()
+                                      }
+                          },
+                          { new: true }
+                              );
+
+                      if (!updated) {
+                                return res.status(404).json({ error: 'Conteúdo não encontrado' });
+                      }
+
+                      res.json(updated);
+              } catch (error) {
+                      console.error('Erro ao atualizar conteúdo:', error);
+                      res.status(500).json({ error: 'Erro ao atualizar conteúdo' });
+              }
+        });
+
+        // DELETE /content/history/:id - Deleta rascunho
+        router.delete('/history/:id', async (req: AuthRequest, res: Response) => {
+              try {
+                      const userId = req.effectiveUserId;
+                      const { id } = req.params;
+
+                      if (!userId) {
+                                return res.status(401).json({ error: 'Usuário não autenticado' });
+                      }
+
+                      const deleted = await GeneratedContent.findOneAndDelete({ _id: id, userId });
+
+                      if (!deleted) {
+                                return res.status(404).json({ error: 'Conteúdo não encontrado' });
+                      }
+
+                      res.json({ message: 'Conteúdo deletado com sucesso' });
+              } catch (error) {
+                      console.error('Erro ao deletar conteúdo:', error);
+                      res.status(500).json({ error: 'Erro ao deletar conteúdo' });
+              }
+        });
 
       // Verificar cache primeiro
       const cached = await getCachedSuggestions(userId, source, targetDate);
