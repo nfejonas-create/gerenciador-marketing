@@ -5,6 +5,7 @@ import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import {
   fetchGoogleNewsSuggestions,
+    fetchLinkedInNewsSuggestions,
   fetchNewsApiSuggestions,
   saveSuggestions,
   getCachedSuggestions,
@@ -53,8 +54,7 @@ router.get('/suggestions', async (req: AuthRequest, res: Response) => {
     if (source === 'google') {
       suggestions = await fetchGoogleNewsSuggestions(niche, targetDate);
     } else {
-      const apiKey = process.env.NEWSAPI_KEY || '';
-      suggestions = await fetchNewsApiSuggestions(niche, targetDate, apiKey);
+          suggestions = await fetchLinkedInNewsSuggestions(niche, targetDate);
     }
     
     // Salvar no banco
