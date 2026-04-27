@@ -90,7 +90,7 @@ export default function ContentGenerator() {
   const handleGenerate = async (suggestion: Suggestion) => {
     setGeneratingId(suggestion.id);
     try {
-      const { data } = await api.post('/content-generator/generate', {
+      const { data } = await api.post('/content/generate', {
         suggestionId: suggestion.id,
         source: activeTab,
         template: 'post',
