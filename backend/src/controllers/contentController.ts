@@ -563,7 +563,7 @@ Retorne SOMENTE JSON valido:
 }`;
 
     const response = await anthropic.messages.create({
-      model: 'claude-3-sonnet-20240229',
+      model: 'claude-3-5-sonnet-20241022',
       max_tokens: 6000,
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
