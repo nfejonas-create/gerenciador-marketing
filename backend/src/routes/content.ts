@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authGuard } from '../middleware/authGuard';
-import { generatePost, analyzeContent, generateCalendar, getPosts, savePost, savePostsBatch, updatePost, deletePost, uploadAndGeneratePosts, scheduleBatch, generateWeeklyPosts } from '../controllers/contentController';
+import { generatePost, analyzeContent, generateCalendar, getPosts, savePost, savePostsBatch, updatePost, deletePost, uploadAndGeneratePosts, scheduleBatch, generateWeeklyPosts, getSuggestions } from '../controllers/contentController';
 import { generateCarousel, saveCarousel, listCarousels, updateCarousel, deleteCarousel, publishCarousel, downloadCarouselPdf } from '../controllers/carouselController';
 import { generatePostImage, generateImageOptions } from '../controllers/imageController';
 import { upload } from '../services/upload';
@@ -8,6 +8,9 @@ import { publishPost } from '../controllers/publishController';
 
 const router = Router();
 router.use(authGuard);
+
+// Sugestões de conteúdo (Google Trends / LinkedIn News)
+router.get('/suggestions', getSuggestions);
 
 // Posts existentes
 router.post('/generate', generatePost);

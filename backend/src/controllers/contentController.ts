@@ -641,3 +641,40 @@ Retorne SOMENTE JSON:
     return res.status(500).json({ error: err.message });
   }
 }
+
+// Sugestões de conteúdo (Google Trends / LinkedIn News simulado)
+export async function getSuggestions(req: AuthRequest, res: Response) {
+  try {
+    const { source } = req.query;
+    
+    // Sugestões estáticas temporárias
+    const suggestions = [
+      {
+        id: '1',
+        headline: 'NBR 5410: Principais mudanças para 2026',
+        snippet: 'Nova norma técnica traz atualizações importantes',
+        source: 'google'
+      },
+      {
+        id: '2', 
+        headline: 'Energia solar: Custo-benefício em indústrias',
+        snippet: 'Economia de até 40% na conta de luz',
+        source: 'google'
+      },
+      {
+        id: '3',
+        headline: 'Manutenção preventiva: Evite acidentes',
+        snippet: 'Checklist essencial para segurança',
+        source: 'linkedin'
+      }
+    ];
+    
+    if (source && source !== 'all') {
+      return res.json(suggestions.filter(s => s.source === source));
+    }
+    
+    return res.json(suggestions);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+}
