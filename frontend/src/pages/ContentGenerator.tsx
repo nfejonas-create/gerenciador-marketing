@@ -269,21 +269,36 @@ export default function ContentGenerator() {
                     <button
                       onClick={async () => {
                         try {
-                          // Primeiro salva o post no banco
                           const postToSave = generated[s.id];
-                          console.log('Salvando post:', postToSave);
+                          await api.post('/content/posts', {
+                            platform: 'linkedin',
+                            content: postToSave.text,
+                            hashtags: Array.isArray(postToSave.hashtags) ? postToSave.hashtags.join(' ') : postToSave.hashtags,
+                            status: 'draft',
+                          });
+                          alert('✅ Post salvo no historico!');
+                          window.location.href = '/conteudo';
+                        } catch (e: any) {
+                          alert(e.response?.data?.error || 'Erro ao salvar');
+                        }
+                      }}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white rounded text-xs"
+                    >
+                      <Save size={12} /> Salvar no historico
+                    </button>
+                    <button
+                      onClick={async () => {
+                        try {
+                          const postToSave = generated[s.id];
                           const { data: savedPost } = await api.post('/content/posts', {
                             platform: 'linkedin',
                             content: postToSave.text,
-                            hashtags: postToSave.hashtags.join(' '),
+                            hashtags: Array.isArray(postToSave.hashtags) ? postToSave.hashtags.join(' ') : postToSave.hashtags,
                             status: 'draft',
                           });
-                          console.log('Post salvo:', savedPost);
-                          // Depois publica usando o ID real
                           await api.post('/content/publish', { postId: savedPost.id });
-                          alert('Post publicado com sucesso!');
+                          alert('✅ Post publicado!');
                         } catch (e: any) {
-                          console.error('Erro ao publicar:', e);
                           alert(e.response?.data?.error || 'Erro ao publicar');
                         }
                       }}
