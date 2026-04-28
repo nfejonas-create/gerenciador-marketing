@@ -65,29 +65,41 @@ async function resolveLinkedInPersonId(accessToken: string): Promise<string> {
 }
 
 async function postToLinkedIn(accessToken: string, fullText: string, savedMemberId?: string | null): Promise<string> {
-  // Usar nova Posts API com urn:li:person:~ (funciona com qualquer ID)
-  console.log('[LinkedIn] Publicando via nova Posts API');
+  // Obter ID numérico do usuário via userinfo
+  const userInfo = await axios.get('https://api.linkedin.com/v2/userinfo', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    timeout: 10000,
+  });
   
+  // Extrair ID numérico do sub (formato: urn:li:person:{id})
+  const sub = userInfo.data.sub;
+  const personId = sub.split(':').pop() || savedMemberId;
+  
+  console.log('[LinkedIn] Publicando com personId:', personId);
+  
+  const author = `urn:li:person:${personId}`;
   const body = {
-    author: 'urn:li:person:~',
-    commentary: fullText,
-    visibility: 'PUBLIC',
-    distribution: { feedDistribution: 'MAIN_FEED', targetEntities: [], thirdPartyDistributionChannels: [] },
+    author,
     lifecycleState: 'PUBLISHED',
-    isReshareDisabledByAuthor: false,
+    specificContent: {
+      'com.linkedin.ugc.ShareContent': {
+        shareCommentary: { text: fullText },
+        shareMediaCategory: 'NONE',
+      },
+    },
+    visibility: { 'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC' },
   };
   
-  const resp = await axios.post('https://api.linkedin.com/rest/posts', body, {
+  const resp = await axios.post('https://api.linkedin.com/v2/ugcPosts', body, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
-      'LinkedIn-Version': '202411',  // Versão mais recente disponível
       'X-Restli-Protocol-Version': '2.0.0',
     },
     timeout: 15000,
   });
   
-  const postId = resp.headers['x-linkedin-id'] || resp.headers['x-restli-id'] || 'published';
+  const postId = resp.headers['x-restli-id'] || 'published';
   console.log('[LinkedIn] Publicado:', postId);
   return postId;
 }
