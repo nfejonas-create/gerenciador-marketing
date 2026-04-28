@@ -65,18 +65,36 @@ async function resolveLinkedInPersonId(accessToken: string): Promise<string> {
 }
 
 async function postToLinkedIn(accessToken: string, fullText: string, savedMemberId?: string | null): Promise<string> {
-  // Obter ID numérico do usuário via userinfo
-  const userInfo = await axios.get('https://api.linkedin.com/v2/userinfo', {
-    headers: { Authorization: `Bearer ${accessToken}` },
-    timeout: 10000,
-  });
-  
-  // Extrair ID numérico do sub (formato: urn:li:person:{id})
-  const sub = userInfo.data.sub;
-  const personId = sub.split(':').pop() || savedMemberId;
-  
-  console.log('[LinkedIn] Publicando com personId:', personId);
-  
+  // Tentativa 1: nova Posts API com urn:li:person:~ (nao precisa de memberId)
+  try {
+    const newApiBody = {
+      author: 'urn:li:person:~',
+      commentary: fullText,
+      visibility: 'PUBLIC',
+      distribution: { feedDistribution: 'MAIN_FEED', targetEntities: [], thirdPartyDistributionChannels: [] },
+      lifecycleState: 'PUBLISHED',
+      isReshareDisabledByAuthor: false,
+    };
+    const resp = await axios.post('https://api.linkedin.com/rest/posts', newApiBody, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        'LinkedIn-Version': '202401',
+        'X-Restli-Protocol-Version': '2.0.0',
+      },
+      timeout: 15000,
+    });
+    const postId = resp.headers['x-linkedin-id'] || resp.headers['x-restli-id'] || 'published';
+    console.log('[LinkedIn] Post via nova API (urn:~):', postId);
+    return postId;
+  } catch (e: any) {
+    console.warn('[LinkedIn] Nova API falhou:', e?.response?.status, e?.response?.data?.message || e?.message);
+  }
+
+  // Tentativa 2: ugcPosts com memberId salvo ou resolvido
+  let personId = savedMemberId && /^\d+$/.test(savedMemberId.trim()) ? savedMemberId.trim() : null;
+  if (!personId) personId = await resolveLinkedInPersonId(accessToken);
+
   const author = `urn:li:person:${personId}`;
   const body = {
     author,
@@ -89,19 +107,16 @@ async function postToLinkedIn(accessToken: string, fullText: string, savedMember
     },
     visibility: { 'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC' },
   };
-  
+
   const resp = await axios.post('https://api.linkedin.com/v2/ugcPosts', body, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
       'X-Restli-Protocol-Version': '2.0.0',
     },
-    timeout: 15000,
   });
-  
-  const postId = resp.headers['x-restli-id'] || 'published';
-  console.log('[LinkedIn] Publicado:', postId);
-  return postId;
+
+  return resp.data.id || resp.headers['x-restli-id'] || '';
 }
 
 // ─── FACEBOOK ───────────────────────────────────────────────────────────────
