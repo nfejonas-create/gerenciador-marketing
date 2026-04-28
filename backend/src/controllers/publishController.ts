@@ -65,34 +65,29 @@ async function resolveLinkedInPersonId(accessToken: string): Promise<string> {
 }
 
 async function postToLinkedIn(accessToken: string, fullText: string, savedMemberId?: string | null): Promise<string> {
-  // Usar memberId salvo ou fallback para ID conhecido
-  const personId = savedMemberId?.trim() || 'dWcJknqJau';
+  // Usar nova Posts API com urn:li:person:~ (funciona com qualquer ID)
+  console.log('[LinkedIn] Publicando via nova Posts API');
   
-  console.log('[LinkedIn] Publicando com memberId:', personId);
-  
-  const author = `urn:li:person:${personId}`;
   const body = {
-    author,
+    author: 'urn:li:person:~',
+    commentary: fullText,
+    visibility: 'PUBLIC',
+    distribution: { feedDistribution: 'MAIN_FEED', targetEntities: [], thirdPartyDistributionChannels: [] },
     lifecycleState: 'PUBLISHED',
-    specificContent: {
-      'com.linkedin.ugc.ShareContent': {
-        shareCommentary: { text: fullText },
-        shareMediaCategory: 'NONE',
-      },
-    },
-    visibility: { 'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC' },
+    isReshareDisabledByAuthor: false,
   };
   
-  const resp = await axios.post('https://api.linkedin.com/v2/ugcPosts', body, {
+  const resp = await axios.post('https://api.linkedin.com/rest/posts', body, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
+      'LinkedIn-Version': '202401',
       'X-Restli-Protocol-Version': '2.0.0',
     },
     timeout: 15000,
   });
   
-  const postId = resp.headers['x-restli-id'] || 'published';
+  const postId = resp.headers['x-linkedin-id'] || resp.headers['x-restli-id'] || 'published';
   console.log('[LinkedIn] Publicado:', postId);
   return postId;
 }
