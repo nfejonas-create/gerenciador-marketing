@@ -81,7 +81,7 @@ async function postToLinkedIn(accessToken: string, fullText: string, savedMember
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
-      'LinkedIn-Version': '202409',  // Versão atualizada
+      'LinkedIn-Version': '202411',  // Versão mais recente disponível
       'X-Restli-Protocol-Version': '2.0.0',
     },
     timeout: 15000,
