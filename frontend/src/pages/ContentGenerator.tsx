@@ -59,7 +59,7 @@ export default function ContentGenerator() {
   const loadSuggestions = async (source: 'google' | 'linkedin') => {
     setLoadingSuggestions(true);
     try {
-      const { data } = await api.get(`/content-generator/suggestions?source=${source}`);
+      const { data } = await api.get(`/content/suggestions?source=${source}`);
       setSuggestions(data.suggestions || []);
     } catch (err) {
       console.error('Erro ao carregar sugestões:', err);
