@@ -107,6 +107,10 @@ export default function Conteudo() {
     loadPosts();
   }, []);
 
+  useEffect(() => {
+    if (tab === 'posts') loadPosts();
+  }, [tab]);
+
   async function loadProducts() {
     try { const { data } = await api.get('/funnel/products'); setProducts(data); } catch {}
   }
@@ -285,7 +289,7 @@ export default function Conteudo() {
       });
       setImportContent(''); setImportCta(''); setImportHashtags('');
       alert('Post salvo no historico!');
-      if (tab === 'posts') loadPosts();
+      loadPosts();
     } catch { alert('Erro ao salvar post'); }
     finally { setSavingImport(false); }
   }
