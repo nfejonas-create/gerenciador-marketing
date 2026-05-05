@@ -1,11 +1,15 @@
 // backend/src/controllers/imageController.ts
 import { Response } from 'express';
 import axios from 'axios';
+import { PrismaClient } from '@prisma/client';
 import { AuthRequest } from '../middleware/authGuard';
+import { getUserContentProfile } from '../services/userContentProfile';
 
-function buildPrompt(topic: string, platform: string): string {
+const prisma = new PrismaClient();
+
+function buildPrompt(topic: string, platform: string, niche: string): string {
   const t = (topic || '').toLowerCase();
-  let subject = 'industrial electrical control panel with cables and circuit breakers';
+  let subject = `professional scene related to ${niche}`;
 
   if (t.includes('motor')) subject = 'three-phase electric motor in industrial setting, copper windings visible';
   else if (t.includes('contator') || t.includes('rele')) subject = 'industrial contactors and relay modules on DIN rail inside control panel';
@@ -17,7 +21,7 @@ function buildPrompt(topic: string, platform: string): string {
   else if (t.includes('nr10') || t.includes('seguranca')) subject = 'electrical safety equipment: insulated gloves, voltage tester, safety signage';
   else if (t.includes('inversor') || t.includes('frequencia')) subject = 'variable frequency drive VFD installed in industrial control cabinet';
 
-  return `Professional industrial photography: ${subject}. Dark blue and orange color palette, dramatic studio lighting, sharp focus, photorealistic, high quality. No text, no logos, no visible human faces. Clean professional composition for social media.`;
+  return `Professional photorealistic photography for ${platform}: ${subject}. Context: ${niche}. Modern business/editorial composition, clean lighting, sharp focus, high quality. No text, no logos, no visible human faces.`;
 }
 
 export async function generatePostImage(req: AuthRequest, res: Response) {
@@ -27,7 +31,8 @@ export async function generatePostImage(req: AuthRequest, res: Response) {
     const apiKey = process.env.STABILITY_API_KEY;
     if (!apiKey) return res.status(503).json({ error: 'STABILITY_API_KEY nao configurada.' });
 
-    const prompt = buildPrompt(topic || '', platform);
+    const profile = await getUserContentProfile(prisma, req.effectiveUserId!);
+    const prompt = buildPrompt(topic || '', platform, profile.niche);
     const aspectRatio = platform === 'linkedin' ? '16:9' : '1:1';
 
     const form = new FormData();

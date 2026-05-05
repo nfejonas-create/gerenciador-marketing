@@ -70,9 +70,12 @@ export async function fetchGoogleNewsSuggestions(query: string, date: string): P
 // Busca noticias de LinkedIn/Marketing/Negocios via Google News RSS
 // (substitui NewsAPI que requer chave paga)
 export async function fetchLinkedInNewsSuggestions(query: string, date: string): Promise<Suggestion[]> {
-  // Usa query combinada: nicho + termos de LinkedIn/marketing
-  const linkedinQuery = `${query} LinkedIn marketing negocios`;
-  return fetchGoogleRSS(linkedinQuery, date, 'LinkedIn News');
+  const linkedinQuery = `${query} LinkedIn noticias profissionais mercado trabalho negocios`;
+  const suggestions = await fetchGoogleRSS(linkedinQuery, date, 'LinkedIn News');
+  if (suggestions.length > 0) return suggestions;
+
+  const pulseQuery = `${query} site:linkedin.com/pulse OR site:linkedin.com/news`;
+  return fetchGoogleRSS(pulseQuery, date, 'LinkedIn News');
 }
 
 export async function fetchNewsApiSuggestions(query: string, date: string, apiKey: string): Promise<Suggestion[]> {

@@ -155,13 +155,7 @@ export default function Conteudo() {
   ];
 
   function buildImagePrompt(style: string): string {
-    const t = (topic || generated?.content || '').substring(0, 200).toLowerCase();
-    let subject = 'Brazilian electrician man in dark navy polo shirt, smiling confidently, holding a smartphone showing an app, industrial electrical panel with organized circuit breakers in background';
-    if (t.includes('motor')) subject = 'Brazilian electrician technician in navy polo shirt inspecting a large three-phase industrial electric motor, copper windings visible, realistic factory environment';
-    else if (t.includes('contator') || t.includes('rele')) subject = 'Brazilian electrician pointing at industrial contactors and relays mounted on DIN rail inside open control panel, professional pose';
-    else if (t.includes('painel') || t.includes('quadro')) subject = 'Brazilian electrician professional in navy polo shirt working on open industrial electrical panel, busbars and circuit breakers clearly visible';
-    else if (t.includes('cabo') || t.includes('fiacao')) subject = 'Brazilian electrician organizing color-coded electrical wires in cable tray, professional industrial setting, natural lighting';
-    else if (t.includes('inversor')) subject = 'Brazilian electrician adjusting variable frequency drive VFD settings on industrial control cabinet display, focused professional expression';
+    const subject = `professional Brazilian business scene related to this post topic: ${(topic || generated?.content || '').substring(0, 220)}`;
     const styleMap: Record<string, string> = {
       realista: `Photorealistic professional photography, Canon DSLR, natural lighting, shallow depth of field. ${subject}. Real photograph look, no illustration. Suitable for LinkedIn post.`,
       ilustrativo: `Digital illustration, technical drawing style, clean lines, dark blue and orange palette. ${subject}. No real photograph.`,

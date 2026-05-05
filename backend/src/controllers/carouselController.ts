@@ -4,6 +4,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { AuthRequest } from '../middleware/authGuard';
 import { generateCarouselPDF } from '../services/carouselPdf';
 import { searchKnowledgeForTopic } from './knowledgeController';
+import { buildContentReference, buildUserSystemPrompt, getUserContentProfile } from '../services/userContentProfile';
 import https from 'https';
 
 const prisma = new PrismaClient();
@@ -15,32 +16,20 @@ export async function generateCarousel(req: AuthRequest, res: Response) {
     const { topic, count = 5, platform = 'linkedin' } = req.body;
     if (!topic) return res.status(400).json({ error: 'topic é obrigatório' });
 
-    // Buscar configurações do usuário
-    let userAiInstructions = '';
-    let userName = '';
-    let userNiche = '';
-    try {
-      const userRecord = await prisma.user.findUnique({
-        where: { id: req.effectiveUserId! },
-        select: { name: true, settings: true },
-      });
-      userName = userRecord?.name?.split(' ')[0] || '';
-      const settings = (userRecord?.settings as any) || {};
-      userAiInstructions = settings.generatorInstructions || settings.aiInstructions || '';
-      userNiche = settings.niche || '';
-    } catch {}
+    const profile = await getUserContentProfile(prisma, req.effectiveUserId!);
 
     // Base de conhecimento
     const kbContext = await searchKnowledgeForTopic(req.effectiveUserId!, topic).catch(() => '');
 
-    const systemPrompt = userAiInstructions
-      ? `Você é um criador de conteúdo especializado${userName ? ` para ${userName}` : ''}${userNiche ? ` na área de ${userNiche}` : ''}. Siga as instruções personalizadas do usuário.`
-      : `Você é um especialista em criação de carrosséis para LinkedIn. Crie conteúdo profissional, direto e de alto impacto.`;
+    const systemPrompt = buildUserSystemPrompt(
+      profile,
+      `Você é um especialista em criação de carrosséis para LinkedIn para ${profile.userName}. Crie conteúdo profissional, direto e de alto impacto.`,
+    );
 
     const userPrompt = `Crie um carrossel profissional para LinkedIn sobre: "${topic}"
 
 Número de slides: ${count} (mínimo 3, máximo 10)
-${userAiInstructions ? `\nINSTRUÇÕES PERSONALIZADAS (prioridade máxima):\n${userAiInstructions}\n` : ''}
+${buildContentReference(profile)}
 ${kbContext ? `\nBASE DE CONHECIMENTO (use como fonte):\n${kbContext}\n` : ''}
 
 REGRAS:

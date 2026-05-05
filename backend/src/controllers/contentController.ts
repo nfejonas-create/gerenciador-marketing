@@ -11,6 +11,12 @@ import {
   saveSuggestions,
 } from '../services/suggestionsService';
 import { normalizeSuggestionViews, toSuggestionsResponse } from '../services/suggestionsContract';
+import {
+  buildContentReference,
+  buildResearchQuery,
+  buildUserSystemPrompt,
+  getUserContentProfile,
+} from '../services/userContentProfile';
 
 const prisma = new PrismaClient();
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -68,7 +74,7 @@ function parseWeeklyPostsResponse(text: string) {
   throw new Error('JSON invalido retornado pela IA');
 }
 
-async function extractTextFromFile(buffer: Buffer, mimetype: string): Promise<string> {
+async function extractTextFromFile(buffer: Buffer, mimetype: string, niche = 'conteudo tecnico'): Promise<string> {
   const base64 = buffer.toString('base64');
 
   if (mimetype === 'application/pdf') {
@@ -96,7 +102,7 @@ async function extractTextFromFile(buffer: Buffer, mimetype: string): Promise<st
         role: 'user',
         content: [
           { type: 'image', source: { type: 'base64', media_type: mimetype as 'image/jpeg' | 'image/png' | 'image/webp', data: base64 } },
-          { type: 'text', text: 'Descreva em detalhes este material tecnico eletrico. Se houver texto, transcreva. Se for esquema eletrico, descreva os componentes e conexoes.' },
+          { type: 'text', text: `Descreva em detalhes este material relacionado ao nicho: ${niche}. Se houver texto, transcreva. Se for diagrama, processo ou documento tecnico, descreva os componentes, etapas e informacoes importantes.` },
         ],
       }],
     });
@@ -107,7 +113,7 @@ async function extractTextFromFile(buffer: Buffer, mimetype: string): Promise<st
 }
 
 const HASHTAG_SETS: Record<string, string[]> = {
-  default: ['#ManualDoEletricista', '#Eletricista', '#Eletrica', '#InstalacaoEletrica', '#EletricidadeIndustrial'],
+  default: ['#ConteudoProfissional', '#LinkedInBrasil', '#DicaPratica', '#Carreira', '#Negocios'],
   automacao: ['#ManualDoEletricista', '#AutomacaoIndustrial', '#Eletricista', '#ArmazenamentoDeGraos', '#AgronegocioBrasil'],
   motores: ['#ManualDoEletricista', '#MotoresEletricos', '#Eletricista', '#ManutencaoEletrica', '#EletricidadeIndustrial'],
   sensores: ['#ManualDoEletricista', '#Sensores', '#Eletricista', '#AutomacaoIndustrial', '#InstalacaoEletrica'],
@@ -117,16 +123,37 @@ const HASHTAG_SETS: Record<string, string[]> = {
   linkedin: ['#ManualDoEletricista', '#Eletricista', '#MercadoEletrico', '#CarreiraEletricista', '#TecnologiaEletrica'],
 };
 
-function getHashtags(topic: string, platform: string): string[] {
+function hashtagFromTerm(term: string) {
+  const normalized = term
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9 ]/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join('');
+  return normalized ? `#${normalized}` : '';
+}
+
+function getHashtags(topic: string, platform: string, niche = ''): string[] {
+  const contextual = [topic, niche]
+    .join(' ')
+    .split(/[,;|]/)
+    .map(hashtagFromTerm)
+    .filter(Boolean)
+    .slice(0, 5);
+  if (contextual.length >= 3) return contextual;
+
   const t = topic.toLowerCase();
-  if (platform === 'linkedin') return HASHTAG_SETS.linkedin;
+  if (platform === 'linkedin' && !niche) return HASHTAG_SETS.linkedin;
   if (t.includes('automa') || t.includes('grao') || t.includes('silo')) return HASHTAG_SETS.automacao;
   if (t.includes('motor')) return HASHTAG_SETS.motores;
   if (t.includes('sensor') || t.includes('fim de curso') || t.includes('boia')) return HASHTAG_SETS.sensores;
   if (t.includes('protec') || t.includes('disjuntor') || t.includes('fusivel') || t.includes('nr10')) return HASHTAG_SETS.protecao;
   if (t.includes('comando') || t.includes('contator') || t.includes('rele')) return HASHTAG_SETS.comando;
   if (t.includes('painel') || t.includes('quadro')) return HASHTAG_SETS.paineis;
-  return HASHTAG_SETS.default;
+  return [...contextual, ...HASHTAG_SETS.default].slice(0, 5);
 }
 
 const TEMPLATES = {
@@ -200,17 +227,7 @@ export async function generatePost(req: AuthRequest, res: Response) {
   try {
     const { topic, platform, tone, product, kbIds } = req.body;
 
-    // Buscar dados do usuario e instrucoes personalizadas
-    let userAiInstructions = '';
-    let userName = 'Jonas';
-    let userNiche = 'eletricidade industrial';
-    try {
-      const userRecord = await prisma.user.findUnique({ where: { id: req.effectiveUserId! }, select: { name: true, settings: true } });
-      userName = userRecord?.name?.split(' ')[0] || 'Jonas';
-      const settings = (userRecord?.settings as any) || {};
-      userAiInstructions = settings.generatorInstructions || settings.aiInstructions || '';
-      userNiche = settings.niche || 'eletricidade industrial';
-    } catch {}
+    const profile = await getUserContentProfile(prisma, req.effectiveUserId!);
 
     let kbContext = '';
     if (kbIds && Array.isArray(kbIds) && kbIds.length > 0) {
@@ -223,13 +240,13 @@ export async function generatePost(req: AuthRequest, res: Response) {
       kbContext = await searchKnowledgeForTopic(req.effectiveUserId!, topic);
     }
 
-    const hashtags = getHashtags(topic, platform || 'linkedin');
+    const hashtags = getHashtags(topic, platform || 'linkedin', profile.niche);
     const template = TEMPLATES[platform as 'linkedin' | 'facebook'] || TEMPLATES.linkedin;
 
-    // System prompt dinamico: se usuario tem instrucoes proprias, usar perfil generico
-    const systemPrompt = userAiInstructions
-      ? `Voce e um assistente especializado em criacao de conteudo para ${userName} na area de ${userNiche}. Siga rigorosamente as instrucoes personalizadas do usuario. Nunca inventar dados. Basear-se no material fornecido.`
-      : `Voce e o assistente de conteudo do Jonas, criador do Manual do Eletricista. Jonas e eletricista industrial e encarregado de obras desde 1997, com especializacao em automacao de armazenagem de graos. Ele vende ebooks tecnicos no Hotmart: Vol. 1 (go.hotmart.com/E104935068T) e Vol. 2 (go.hotmart.com/A105044012Q). Tom: direto, linguagem de obra, sem academicismo, sem cliches motivacionais. Nunca inventar dados tecnicos. Basear-se no material fornecido.`;
+    const systemPrompt = buildUserSystemPrompt(
+      profile,
+      `Voce e um assistente especializado em criacao de conteudo para ${profile.userName}.`,
+    );
 
     const userPrompt = `🎨 CRIE UM POST UNICO E CRIATIVO SOBRE O TEMA ABAIXO
 
@@ -238,12 +255,9 @@ PLATAFORMA: ${platform || 'linkedin'}
 ${product ? `PRODUTO/LINK A MENCIONAR: ${product} - coloque o link APENAS no campo "cta" do JSON, NAO no corpo do post` : ''}
 ${tone ? `TOM ADICIONAL: ${tone}` : ''}
 
-${userAiInstructions ? `📋 INSTRUCOES PERSONALIZADAS DO USUARIO (SIGA RIGOROSAMENTE - PRIORIDADE MAXIMA):
-═══════════════════════════════════════════════════════════════
-${userAiInstructions}
-═══════════════════════════════════════════════════════════════
+${buildContentReference(profile)}
 
-` : ''}${template}
+${template}
 
 ${kbContext ? `📚 BASE DE CONHECIMENTO (use como fonte):
 ---
@@ -258,7 +272,7 @@ ${kbContext}
 5. As hashtags vao APENAS no campo "hashtags"
 6. Varie o formato a cada post - nao fique repetindo a mesma estrutura
 7. Seja criativo e evite clichês como "Voce sabia que..."
-8. GERE HASHTAGS CONTEXTUAIS baseadas no tema, relevantes para ${userNiche}
+8. GERE HASHTAGS CONTEXTUAIS baseadas no tema, relevantes para ${profile.niche}
 
 HASHTAGS SUGERIDAS (use como inspiracao ou crie melhores): ${hashtags.join(' ')}
 
@@ -289,13 +303,17 @@ Retorne SOMENTE JSON valido:
 export async function analyzeContent(req: AuthRequest, res: Response) {
   try {
     const { content, platform = 'linkedin' } = req.body;
+    const profile = await getUserContentProfile(prisma, req.effectiveUserId!);
 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 1000,
       messages: [{
         role: 'user',
-        content: `Analise este post para ${platform} do Manual do Eletricista:
+        content: `Analise este post para ${platform}.
+
+${buildContentReference(profile)}
+
 1. Gancho, 2. Clareza, 3. CTA, 4. Hashtags, 5. Tamanho
 
 POST: "${content}"
@@ -320,6 +338,7 @@ Retorne SOMENTE JSON:
 export async function generateCalendar(req: AuthRequest, res: Response) {
   try {
     const { weeks = 4, platforms = ['linkedin', 'facebook'] } = req.body;
+    const profile = await getUserContentProfile(prisma, req.effectiveUserId!);
 
     const kbItems = await prisma.knowledgeBase.findMany({
       where: { userId: req.effectiveUserId!, active: true },
@@ -332,9 +351,12 @@ export async function generateCalendar(req: AuthRequest, res: Response) {
       max_tokens: 2000,
       messages: [{
         role: 'user',
-        content: `Crie um calendario editorial de ${weeks} semanas para o Manual do Eletricista.
+        content: `Crie um calendario editorial de ${weeks} semanas.
+
+${buildContentReference(profile)}
+
 Plataformas: ${platforms.join(', ')}.
-Materiais: ${kbItems.map(i => i.title).join(', ') || 'conteudo geral de eletricidade industrial'}.
+Materiais: ${kbItems.map(i => i.title).join(', ') || `conteudo geral sobre ${profile.niche}`}.
 Cadencia: LinkedIn 3x/semana (Seg, Qua, Sex) + Facebook 5x/semana.
 
 Retorne JSON:
@@ -356,12 +378,16 @@ Retorne JSON:
 export async function analyzeMaterial(req: AuthRequest, res: Response) {
   try {
     const { text, title } = req.body;
+    const profile = await getUserContentProfile(prisma, req.effectiveUserId!);
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 1500,
       messages: [{
         role: 'user',
-        content: `Analise este material e identifique temas com potencial de engajamento:
+        content: `Analise este material e identifique temas com potencial de engajamento.
+
+${buildContentReference(profile)}
+
 "${title || 'Material'}"\n\n${text.substring(0, 3000)}
 
 Retorne JSON:
@@ -499,35 +525,23 @@ export async function generateWeeklyPosts(req: AuthRequest, res: Response) {
     const { topic, platform = 'linkedin', tone = 'mix' } = req.body;
     if (!topic) return res.status(400).json({ error: 'Tema obrigatorio' });
 
-    // Buscar dados do usuario e instrucoes personalizadas
-    let userAiInstructions = '';
-    let userName = 'Jonas';
-    let userNiche = 'eletricidade industrial';
-    try {
-      const userRecord = await prisma.user.findUnique({ where: { id: req.effectiveUserId! }, select: { name: true, settings: true } });
-      userName = userRecord?.name?.split(' ')[0] || 'Jonas';
-      const settings = (userRecord?.settings as any) || {};
-      userAiInstructions = settings.generatorInstructions || settings.aiInstructions || '';
-      userNiche = settings.niche || 'eletricidade industrial';
-    } catch {}
+    const profile = await getUserContentProfile(prisma, req.effectiveUserId!);
 
     const kbContext = await searchKnowledgeForTopic(req.effectiveUserId!, topic);
     const template = TEMPLATES[platform as 'linkedin' | 'facebook'] || TEMPLATES.linkedin;
-    const hashtags = getHashtags(topic, platform);
+    const hashtags = getHashtags(topic, platform, profile.niche);
 
-    const systemPrompt = userAiInstructions
-      ? `Voce e um assistente especializado em criacao de conteudo para ${userName} na area de ${userNiche}. Siga rigorosamente as instrucoes personalizadas do usuario. Nunca inventar dados. Basear-se no material fornecido.`
-      : `Voce e o assistente de conteudo do Jonas, criador do Manual do Eletricista. Jonas e eletricista industrial e encarregado de obras desde 1997, com especializacao em automacao de armazenagem de graos. Ele vende ebooks no Hotmart: Vol.1 (go.hotmart.com/E104935068T) e Vol.2 (go.hotmart.com/A105044012Q). Tom: direto, linguagem de obra, sem academicismo, sem cliches motivacionais. Nunca inventar dados tecnicos.`;
+    const systemPrompt = buildUserSystemPrompt(
+      profile,
+      `Voce e um assistente especializado em criacao de conteudo para ${profile.userName}.`,
+    );
 
     const userPrompt = `🎨 GERE 7 POSTS UNICOS E VARIADOS sobre o tema: "${topic}"
 
 PLATAFORMA: ${platform}
-${userAiInstructions ? `📋 INSTRUCOES PERSONALIZADAS DO USUARIO (SIGA RIGOROSAMENTE):
-═══════════════════════════════════════════════════════════════
-${userAiInstructions}
-═══════════════════════════════════════════════════════════════
+${buildContentReference(profile)}
 
-` : ''}${template}
+${template}
 
 ${kbContext ? `📚 BASE DE CONHECIMENTO:
 ---
@@ -596,24 +610,30 @@ export async function uploadAndGeneratePosts(req: AuthRequest, res: Response) {
     if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
 
     const { originalname, mimetype, buffer } = req.file;
-    const { platform = 'linkedin', tone = 'direto, linguagem de obra', quantity = '5' } = req.body;
+    const { platform = 'linkedin', tone = 'direto, pratico e profissional', quantity = '5' } = req.body;
+    const profile = await getUserContentProfile(prisma, req.effectiveUserId!);
 
     let extractedText = '';
 
-    extractedText = await extractTextFromFile(buffer, mimetype);
+    extractedText = await extractTextFromFile(buffer, mimetype, profile.niche);
 
     if (!extractedText.trim()) return res.status(422).json({ error: 'Nao foi possivel extrair conteudo.' });
 
-    const hashtags = getHashtags(extractedText.substring(0, 200), platform);
+    const hashtags = getHashtags(extractedText.substring(0, 200), platform, profile.niche);
     const template = TEMPLATES[platform as 'linkedin' | 'facebook'] || TEMPLATES.linkedin;
 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 4000,
-      system: `Voce e assistente do Manual do Eletricista. Jonas e eletricista industrial desde 1997. Tom: direto, linguagem de obra.`,
+      system: buildUserSystemPrompt(
+        profile,
+        `Voce e um assistente especializado em transformar materiais em conteudo para ${profile.userName}.`,
+      ),
       messages: [{
         role: 'user',
-        content: `${template}
+        content: `${buildContentReference(profile)}
+
+${template}
 
 Gere exatamente ${quantity} posts para ${platform} com base neste material:
 ---
@@ -655,25 +675,19 @@ export async function getSuggestions(req: AuthRequest, res: Response) {
     const source = req.query.source === 'linkedin' ? 'linkedin' : 'google';
     const date = String(req.query.date || new Date().toISOString());
 
-    const user = await prisma.user.findUnique({
-      where: { id: req.effectiveUserId! },
-      select: { settings: true, name: true },
-    });
-    const settings = (user?.settings as any) || {};
-    const niche = String(settings.niche || settings.contentNiche || 'eletricista automação industrial energia elétrica Brasil');
-    const audience = String(settings.audience || settings.targetAudience || '');
-    const query = [niche, audience].filter(Boolean).join(' ');
+    const profile = await getUserContentProfile(prisma, req.effectiveUserId!);
+    const query = buildResearchQuery(profile);
 
-    let suggestions = await getCachedSuggestions(req.effectiveUserId!, source, date);
+    let suggestions = source === 'linkedin'
+      ? await fetchLinkedInNewsSuggestions(query, date)
+      : await fetchGoogleNewsSuggestions(query, date);
 
-    if (suggestions.length === 0) {
-      suggestions = source === 'linkedin'
-        ? await fetchLinkedInNewsSuggestions(query, date)
-        : await fetchGoogleNewsSuggestions(query, date);
-
+    if (suggestions.length > 0) {
+      await saveSuggestions(req.effectiveUserId!, source, suggestions);
+    } else {
+      suggestions = await getCachedSuggestions(req.effectiveUserId!, source, date);
       if (suggestions.length > 0) {
-        await saveSuggestions(req.effectiveUserId!, source, suggestions);
-        suggestions = await getCachedSuggestions(req.effectiveUserId!, source, date);
+        console.log(`[getSuggestions] Usando cache para ${source} sem resultado novo`);
       }
     }
 
@@ -683,16 +697,16 @@ export async function getSuggestions(req: AuthRequest, res: Response) {
     console.error('[getSuggestions]', err);
     const fallback = normalizeSuggestionViews('fallback', [
       {
-        headline: 'NR-10 e segurança elétrica continuam como tema de alta demanda',
-        url: 'https://manualdoeletricista.manus.space/',
+        headline: 'Tendências do nicho configurado podem virar pauta prática',
+        url: 'https://www.linkedin.com/news/',
         source: 'fallback',
-        snippet: 'Use este tema como pauta segura enquanto o radar externo estiver indisponível.',
+        snippet: 'Use a configuracao de nicho do usuario como filtro enquanto o radar externo estiver indisponivel.',
       },
       {
-        headline: 'Automação industrial e CLP para eletricistas práticos',
-        url: 'https://manualdoeletricista.manus.space/',
+        headline: 'Transforme noticias recentes em posts educativos e comerciais',
+        url: 'https://news.google.com/',
         source: 'fallback',
-        snippet: 'Tema evergreen alinhado ao Manual do Eletricista.',
+        snippet: 'Pauta evergreen alinhada ao publico e objetivo salvos nas configuracoes.',
       },
     ]);
     return res.json(toSuggestionsResponse(fallback));

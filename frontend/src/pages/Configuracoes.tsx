@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { CheckCircle, AlertCircle, Save, Brain } from 'lucide-react';
+import { CheckCircle, AlertCircle, Save, Brain, Target } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -39,6 +39,14 @@ export default function Configuracoes() {
   const [aiInstructions, setAiInstructions] = useState(GANCHO_TEMPLATE);
   const [savingAi, setSavingAi] = useState(false);
   const [aiSaved, setAiSaved] = useState(false);
+  const [contentProfile, setContentProfile] = useState({
+    niche: '',
+    audience: '',
+    contentGoals: '',
+    blockedTopics: '',
+  });
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileSaved, setProfileSaved] = useState(false);
 
   useEffect(() => {
     // Carrega contas salvas e pre-preenche
@@ -58,6 +66,12 @@ export default function Configuracoes() {
     // Carrega instrucoes da IA salvas
     api.get('/auth/settings').then(r => {
       if (r.data?.aiInstructions) setAiInstructions(r.data.aiInstructions);
+      setContentProfile({
+        niche: r.data?.niche || r.data?.contentNiche || '',
+        audience: r.data?.audience || r.data?.targetAudience || '',
+        contentGoals: r.data?.contentGoals || r.data?.goals || '',
+        blockedTopics: r.data?.blockedTopics || '',
+      });
     }).catch(() => {});
   }, []);
 
@@ -84,6 +98,15 @@ export default function Configuracoes() {
     } catch { alert('Erro ao salvar instrucoes'); } finally { setSavingAi(false); }
   }
 
+  async function saveContentProfile() {
+    setSavingProfile(true);
+    try {
+      await api.put('/auth/settings', contentProfile);
+      setProfileSaved(true);
+      setTimeout(() => setProfileSaved(false), 2000);
+    } catch { alert('Erro ao salvar nicho do usuario'); } finally { setSavingProfile(false); }
+  }
+
   function formatDate(d?: string) {
     if (!d) return '';
     return new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -105,6 +128,62 @@ export default function Configuracoes() {
             <p className="text-gray-400 text-sm">{user?.email}</p>
           </div>
         </div>
+      </div>
+
+      {/* Nicho e pesquisa */}
+      <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-4">
+        <div className="flex items-center gap-2">
+          <Target size={18} className="text-green-400" />
+          <h2 className="font-semibold text-white">Nicho e pesquisa do usuario</h2>
+        </div>
+        <p className="text-xs text-gray-500">
+          Todos os geradores usam esta referencia para buscar tendencias, noticias do LinkedIn, posts, carrosseis, imagens e funil deste usuario.
+        </p>
+        <div>
+          <label className="text-xs text-gray-500 block mb-1">Nicho principal</label>
+          <textarea
+            value={contentProfile.niche}
+            onChange={e => setContentProfile(prev => ({ ...prev, niche: e.target.value }))}
+            rows={3}
+            placeholder="Ex: eletricidade industrial, CLP, automacao, NR10, manutencao eletrica"
+            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm resize-y focus:border-green-500 outline-none"
+          />
+        </div>
+        <div>
+          <label className="text-xs text-gray-500 block mb-1">Publico-alvo</label>
+          <textarea
+            value={contentProfile.audience}
+            onChange={e => setContentProfile(prev => ({ ...prev, audience: e.target.value }))}
+            rows={2}
+            placeholder="Ex: eletricistas e tecnicos no Brasil / profissionais de RH e departamento pessoal"
+            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm resize-y focus:border-green-500 outline-none"
+          />
+        </div>
+        <div>
+          <label className="text-xs text-gray-500 block mb-1">Objetivo do conteudo</label>
+          <input
+            value={contentProfile.contentGoals}
+            onChange={e => setContentProfile(prev => ({ ...prev, contentGoals: e.target.value }))}
+            placeholder="Ex: gerar autoridade, captar leads e vender ebooks"
+            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:border-green-500 outline-none"
+          />
+        </div>
+        <div>
+          <label className="text-xs text-gray-500 block mb-1">Assuntos para evitar</label>
+          <input
+            value={contentProfile.blockedTopics}
+            onChange={e => setContentProfile(prev => ({ ...prev, blockedTopics: e.target.value }))}
+            placeholder="Ex: politica, noticias internacionais fora do nicho, temas sem relacao"
+            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:border-green-500 outline-none"
+          />
+        </div>
+        <button
+          onClick={saveContentProfile}
+          disabled={savingProfile}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm transition-colors ${profileSaved ? 'bg-green-600 text-white' : 'bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white'}`}>
+          <Save size={14} />
+          {profileSaved ? '✓ Nicho salvo!' : savingProfile ? 'Salvando...' : 'Salvar nicho e pesquisa'}
+        </button>
       </div>
 
       {/* LinkedIn */}

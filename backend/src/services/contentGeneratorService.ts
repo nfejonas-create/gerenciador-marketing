@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { PrismaClient } from '@prisma/client';
+import { buildContentReference, buildUserSystemPrompt, settingsToContentProfile } from './userContentProfile';
 
 const prisma = new PrismaClient();
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -18,11 +19,10 @@ interface GeneratedResult {
   readTime: number;
 }
 
-// System prompt padrão (Jonas)
-const DEFAULT_SYSTEM_PROMPT = `Você é Jonas, eletricista industrial com 25+ anos de experiência e criador do Manual do Eletricista.
-Escreva posts para LinkedIn com linguagem técnica mas acessível, sempre com aplicação prática.
-Tom: direto, linguagem de obra, sem academicismo, sem clichês motivacionais.
-Nunca inventar dados técnicos. Basear-se no material fornecido.`;
+const DEFAULT_SYSTEM_PROMPT = `Você é um especialista em conteúdo profissional para LinkedIn.
+Escreva com linguagem técnica mas acessível, sempre com aplicação prática.
+Tom: direto, útil e sem clichês motivacionais.
+Nunca inventar dados técnicos, leis ou métricas. Basear-se no material fornecido.`;
 
 // Gerar conteúdo via Claude
 export async function generateContent(
@@ -36,13 +36,12 @@ export async function generateContent(
   });
   
   const settings = (user?.settings as any) || {};
-  const persona = options.persona || settings.persona || DEFAULT_SYSTEM_PROMPT;
-  const niche = options.niche || settings.niche || 'eletricidade industrial';
-  const userName = user?.name?.split(' ')[0] || 'Jonas';
-  
-  const systemPrompt = persona.includes('eletricista') 
-    ? persona 
-    : `${DEFAULT_SYSTEM_PROMPT}\n\nPersona adicional: ${persona}`;
+  const profile = settingsToContentProfile(
+    { ...settings, ...(options.niche ? { niche: options.niche } : {}), ...(options.persona ? { persona: options.persona } : {}) },
+    user?.name?.split(' ')[0] || 'Usuario',
+  );
+  const userName = profile.userName;
+  const systemPrompt = buildUserSystemPrompt(profile, DEFAULT_SYSTEM_PROMPT);
   
   const templateDescriptions: Record<string, string> = {
     post: 'post único para LinkedIn (máx 3000 caracteres)',
@@ -55,12 +54,14 @@ export async function generateContent(
 TÍTULO: ${options.headline}
 RESUMO: ${options.snippet}
 
-Crie um ${templateDescriptions[options.template]} sobre este assunto aplicado ao contexto de ${niche}.
+Crie um ${templateDescriptions[options.template]} sobre este assunto aplicado ao contexto de ${profile.niche}.
+
+${buildContentReference(profile)}
 
 REGRAS:
 - Abertura impactante (gancho forte nos primeiros 2 segundos)
 - Conteúdo técnico prático e aplicável
-- CTA para o Manual do Eletricista no final
+- CTA alinhado ao objetivo do usuario no final
 - Tom: ${userName} falando diretamente com o leitor
 - Use 2-3 emojis relevantes (não exagere)
 - Parágrafos curtos (máx 3 linhas cada)
