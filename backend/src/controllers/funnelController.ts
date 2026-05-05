@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import OpenAI from 'openai';
 import { AuthRequest } from '../middleware/authGuard';
 import { buildContentReference, getUserContentProfile } from '../services/userContentProfile';
+import { getKnowledgeReferenceForUser } from './knowledgeController';
 
 const prisma = new PrismaClient();
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -36,10 +37,12 @@ export async function getFunnelSuggestions(req: AuthRequest, res: Response) {
     const products = await prisma.product.findMany({ where: { userId: req.effectiveUserId! } });
     const metrics = await prisma.metric.findMany({ where: { userId: req.effectiveUserId! }, orderBy: { date: 'desc' }, take: 10 });
     const profile = await getUserContentProfile(prisma, req.effectiveUserId!);
+    const kbContext = await getKnowledgeReferenceForUser(req.effectiveUserId!, 4);
     if (products.length === 0) return res.json({ suggestions: [] });
     const prompt = `Com base nas metricas de engajamento: ${JSON.stringify(metrics)}
 e nos produtos: ${JSON.stringify(products)},
 ${buildContentReference(profile)}
+${kbContext ? `\nBASE DE CONHECIMENTO DO USUARIO:\n${kbContext}\n` : ''}
 
 sugira CTAs inteligentes para cada produto com base no comportamento do publico.
 Retorne JSON: { "suggestions": [{ "productId": "...", "productName": "...", "cta": "...", "platform": "linkedin|facebook", "strategy": "..." }] }`;

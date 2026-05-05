@@ -62,8 +62,11 @@ export function buildContentReference(profile: UserContentProfile) {
 - Publico-alvo: ${profile.audience}
 - Objetivo do conteudo: ${profile.contentGoals}
 ${profile.blockedTopics ? `- Evitar assuntos: ${profile.blockedTopics}` : ''}
+${profile.aiInstructions ? `
+PROMPT DAS CONFIGURACOES (prioridade alta):
+${profile.aiInstructions}` : ''}
 
-Use essa referencia como filtro. Nao misture nichos de outros usuarios.`;
+Use essa referencia e o prompt das configuracoes como filtro. Nao misture nichos de outros usuarios.`;
 }
 
 export function buildUserSystemPrompt(profile: UserContentProfile, fallbackRole: string) {
@@ -71,9 +74,6 @@ export function buildUserSystemPrompt(profile: UserContentProfile, fallbackRole:
   return `${persona}
 
 ${buildContentReference(profile)}
-
-${profile.aiInstructions ? `INSTRUCOES PERSONALIZADAS:
-${profile.aiInstructions}` : ''}
 
 Nunca invente dados tecnicos, leis, metricas ou links. Pesquise/adapte pelo contexto recebido e preserve o nicho do usuario.`;
 }

@@ -4,10 +4,11 @@ import axios from 'axios';
 import { PrismaClient } from '@prisma/client';
 import { AuthRequest } from '../middleware/authGuard';
 import { getUserContentProfile } from '../services/userContentProfile';
+import { searchKnowledgeForTopic } from './knowledgeController';
 
 const prisma = new PrismaClient();
 
-function buildPrompt(topic: string, platform: string, niche: string): string {
+function buildPrompt(topic: string, platform: string, niche: string, knowledgeContext = ''): string {
   const t = (topic || '').toLowerCase();
   let subject = `professional scene related to ${niche}`;
 
@@ -21,7 +22,7 @@ function buildPrompt(topic: string, platform: string, niche: string): string {
   else if (t.includes('nr10') || t.includes('seguranca')) subject = 'electrical safety equipment: insulated gloves, voltage tester, safety signage';
   else if (t.includes('inversor') || t.includes('frequencia')) subject = 'variable frequency drive VFD installed in industrial control cabinet';
 
-  return `Professional photorealistic photography for ${platform}: ${subject}. Context: ${niche}. Modern business/editorial composition, clean lighting, sharp focus, high quality. No text, no logos, no visible human faces.`;
+  return `Professional photorealistic photography for ${platform}: ${subject}. Context: ${niche}. ${knowledgeContext ? `User reference material: ${knowledgeContext.substring(0, 800)}. ` : ''}Modern business/editorial composition, clean lighting, sharp focus, high quality. No text, no logos, no visible human faces.`;
 }
 
 export async function generatePostImage(req: AuthRequest, res: Response) {
@@ -32,7 +33,8 @@ export async function generatePostImage(req: AuthRequest, res: Response) {
     if (!apiKey) return res.status(503).json({ error: 'STABILITY_API_KEY nao configurada.' });
 
     const profile = await getUserContentProfile(prisma, req.effectiveUserId!);
-    const prompt = buildPrompt(topic || '', platform, profile.niche);
+    const kbContext = await searchKnowledgeForTopic(req.effectiveUserId!, topic || profile.niche).catch(() => '');
+    const prompt = buildPrompt(topic || '', platform, profile.niche, kbContext);
     const aspectRatio = platform === 'linkedin' ? '16:9' : '1:1';
 
     const form = new FormData();

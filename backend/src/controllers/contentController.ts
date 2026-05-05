@@ -3,7 +3,7 @@ import { Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import Anthropic from '@anthropic-ai/sdk';
 import { AuthRequest } from '../middleware/authGuard';
-import { searchKnowledgeForTopic } from './knowledgeController';
+import { getKnowledgeReferenceForUser, searchKnowledgeForTopic } from './knowledgeController';
 import {
   fetchGoogleNewsSuggestions,
   fetchLinkedInNewsSuggestions,
@@ -304,6 +304,7 @@ export async function analyzeContent(req: AuthRequest, res: Response) {
   try {
     const { content, platform = 'linkedin' } = req.body;
     const profile = await getUserContentProfile(prisma, req.effectiveUserId!);
+    const kbContext = await getKnowledgeReferenceForUser(req.effectiveUserId!, 3);
 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
@@ -313,6 +314,7 @@ export async function analyzeContent(req: AuthRequest, res: Response) {
         content: `Analise este post para ${platform}.
 
 ${buildContentReference(profile)}
+${kbContext ? `\nBASE DE CONHECIMENTO DO USUARIO:\n${kbContext}\n` : ''}
 
 1. Gancho, 2. Clareza, 3. CTA, 4. Hashtags, 5. Tamanho
 
@@ -339,6 +341,7 @@ export async function generateCalendar(req: AuthRequest, res: Response) {
   try {
     const { weeks = 4, platforms = ['linkedin', 'facebook'] } = req.body;
     const profile = await getUserContentProfile(prisma, req.effectiveUserId!);
+    const kbContext = await getKnowledgeReferenceForUser(req.effectiveUserId!, 5);
 
     const kbItems = await prisma.knowledgeBase.findMany({
       where: { userId: req.effectiveUserId!, active: true },
@@ -354,6 +357,7 @@ export async function generateCalendar(req: AuthRequest, res: Response) {
         content: `Crie um calendario editorial de ${weeks} semanas.
 
 ${buildContentReference(profile)}
+${kbContext ? `\nBASE DE CONHECIMENTO DO USUARIO (use para puxar temas e evitar conteudo generico):\n${kbContext}\n` : ''}
 
 Plataformas: ${platforms.join(', ')}.
 Materiais: ${kbItems.map(i => i.title).join(', ') || `conteudo geral sobre ${profile.niche}`}.
@@ -379,6 +383,7 @@ export async function analyzeMaterial(req: AuthRequest, res: Response) {
   try {
     const { text, title } = req.body;
     const profile = await getUserContentProfile(prisma, req.effectiveUserId!);
+    const kbContext = await getKnowledgeReferenceForUser(req.effectiveUserId!, 3);
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 1500,
@@ -387,6 +392,7 @@ export async function analyzeMaterial(req: AuthRequest, res: Response) {
         content: `Analise este material e identifique temas com potencial de engajamento.
 
 ${buildContentReference(profile)}
+${kbContext ? `\nBASE DE CONHECIMENTO DO USUARIO:\n${kbContext}\n` : ''}
 
 "${title || 'Material'}"\n\n${text.substring(0, 3000)}
 

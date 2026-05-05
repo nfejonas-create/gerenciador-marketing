@@ -155,6 +155,24 @@ export async function searchKnowledgeForTopic(userId: string, topic: string): Pr
   return relevant.map(i => `[${i.title}]\n${i.content.substring(0, 2000)}`).join('\n\n---\n\n');
 }
 
+export async function getKnowledgeReferenceForUser(userId: string, limit = 4): Promise<string> {
+  const items = await prisma.knowledgeBase.findMany({
+    where: { userId, active: true },
+    select: { title: true, content: true, type: true, tags: true },
+    orderBy: { createdAt: 'desc' },
+    take: limit,
+  });
+
+  if (!items.length) return '';
+
+  return items
+    .map((item) => {
+      const tags = item.tags ? `\nTags: ${item.tags}` : '';
+      return `[${item.title}]${tags}\n${item.content.substring(0, 1500)}`;
+    })
+    .join('\n\n---\n\n');
+}
+
 export async function deleteKnowledge(req: AuthRequest, res: Response) {
   const { id } = req.params;
   await prisma.knowledgeBase.updateMany({
