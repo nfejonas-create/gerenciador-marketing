@@ -24,7 +24,11 @@ const TONES = [
 ];
 
 interface Product { id: string; name: string; url?: string; type?: string; price?: number; }
-interface SavedPost { id: string; platform: string; status: string; content: string; cta?: string; hashtags?: string; scheduledAt?: string; imageUrl?: string; }
+interface SavedPost { id: string; platform: string; status: string; content: string; cta?: string; hashtags?: string; scheduledAt?: string; publishedAt?: string; createdAt?: string; imageUrl?: string; }
+
+function postRefDate(post: SavedPost): Date {
+  return new Date(post.publishedAt || post.scheduledAt || post.createdAt || 0);
+}
 
 export default function Conteudo() {
   const [tab, setTab] = useState<'generate' | 'upload' | 'analyze' | 'posts'>('generate');
@@ -71,6 +75,7 @@ export default function Conteudo() {
   // Filtros de posts
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterPlatform, setFilterPlatform] = useState('all');
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
 
   // Agendamento em lote (per-post datetime)
   const [showBatchModal, setShowBatchModal] = useState(false);
@@ -99,8 +104,8 @@ export default function Conteudo() {
 
   useEffect(() => {
     loadProducts();
-    if (tab === 'posts') loadPosts();
-  }, [tab]);
+    loadPosts();
+  }, []);
 
   async function loadProducts() {
     try { const { data } = await api.get('/funnel/products'); setProducts(data); } catch {}
@@ -109,16 +114,7 @@ export default function Conteudo() {
   async function loadPosts() {
     try {
       const { data } = await api.get('/content/posts');
-      // Ordenar: agendados por data (mais próximo primeiro), depois rascunhos, depois publicados
-      const sorted = [...data].sort((a: SavedPost, b: SavedPost) => {
-        const order = (p: SavedPost) => p.status === 'scheduled' ? 0 : p.status === 'draft' ? 1 : 2;
-        if (order(a) !== order(b)) return order(a) - order(b);
-        if (a.status === 'scheduled' && b.status === 'scheduled') {
-          return new Date(a.scheduledAt!).getTime() - new Date(b.scheduledAt!).getTime();
-        }
-        return new Date(b.scheduledAt || 0).getTime() - new Date(a.scheduledAt || 0).getTime();
-      });
-      setPosts(sorted);
+      setPosts(data);
     } catch {}
   }
 
@@ -142,6 +138,16 @@ export default function Conteudo() {
       const productStr = selectedProduct ? `${selectedProduct.name}${selectedProduct.url ? ' (link: ' + selectedProduct.url + ')' : ''}` : '';
       const { data } = await api.post('/content/generate', { topic, platform, tone: toneLabel, product: productStr });
       setGenerated(data);
+      const saved = await api.post('/content/posts', {
+        platform,
+        content: data.content,
+        cta: data.cta || null,
+        hashtags: Array.isArray(data.hashtags) ? data.hashtags.join(' ') : data.hashtags,
+        status: 'draft',
+        imageUrl: null,
+      });
+      setSavedPostId(saved.data.id);
+      loadPosts();
     } catch (e: any) { alert(e.response?.data?.error || 'Erro ao gerar post'); }
     finally { setLoadingGen(false); }
   }
@@ -378,7 +384,14 @@ export default function Conteudo() {
     const statusOk = filterStatus === 'all' || p.status === filterStatus;
     const platOk = filterPlatform === 'all' || p.platform === filterPlatform;
     return statusOk && platOk;
+  }).sort((a, b) => {
+    const diff = postRefDate(a).getTime() - postRefDate(b).getTime();
+    return sortOrder === 'asc' ? diff : -diff;
   });
+  const draftRailPosts = posts
+    .filter(p => p.status === 'draft' || p.status === 'scheduled')
+    .sort((a, b) => postRefDate(b).getTime() - postRefDate(a).getTime())
+    .slice(0, 8);
 
   // ─── MODALS ─────────────────────────────────────────────────────────────────
 
@@ -634,6 +647,35 @@ export default function Conteudo() {
         ))}
       </div>
 
+      {tab !== 'posts' && (
+        <div className="xl:float-right xl:w-80 xl:ml-6 bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="font-semibold text-white text-sm">Rascunhos e agendados</h2>
+            <button onClick={() => setTab('posts')} className="text-xs text-blue-400 hover:text-blue-300">Abrir historico</button>
+          </div>
+          {draftRailPosts.length === 0 ? (
+            <p className="text-gray-500 text-xs py-3">Nenhum rascunho ou agendamento salvo.</p>
+          ) : (
+            <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1">
+              {draftRailPosts.map(post => (
+                <div key={post.id} className="bg-gray-800 border border-gray-700 rounded-lg p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className={`text-[11px] px-2 py-0.5 rounded-full ${post.platform === 'linkedin' ? 'bg-blue-900 text-blue-300' : 'bg-indigo-900 text-indigo-300'}`}>{post.platform}</span>
+                    <span className={`text-[11px] ${post.status === 'scheduled' ? 'text-yellow-400' : 'text-gray-400'}`}>{post.status === 'scheduled' ? 'Agendado' : 'Rascunho'}</span>
+                  </div>
+                  <p className="text-gray-300 text-xs line-clamp-3">{post.content}</p>
+                  {post.scheduledAt && <p className="text-gray-500 text-[11px]">{fmtDate(post.scheduledAt)}</p>}
+                  <button onClick={() => { setScheduleDate(post.scheduledAt ? post.scheduledAt.slice(0, 16) : ''); setPublishModal({ post }); }}
+                    className="w-full bg-gray-700 hover:bg-gray-600 text-gray-200 text-xs px-2 py-1.5 rounded-lg">
+                    {post.status === 'scheduled' ? 'Reagendar' : 'Agendar / publicar'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── ABA: GERAR POST ── */}
       {tab === 'generate' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -736,9 +778,10 @@ export default function Conteudo() {
                 <>
                   <div className="flex items-center justify-between">
                     <h2 className="font-semibold text-white">Post Gerado</h2>
-                    <button onClick={() => savePost(generated, platform, generatedImage)}
-                      className="flex items-center gap-1 text-sm bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg transition-colors">
-                      <Save size={14} /> Salvar rascunho
+                    <button onClick={() => !savedPostId && savePost(generated, platform, generatedImage)}
+                      disabled={Boolean(savedPostId)}
+                      className="flex items-center gap-1 text-sm bg-blue-600 hover:bg-blue-500 disabled:bg-green-700 disabled:opacity-80 text-white px-3 py-1.5 rounded-lg transition-colors">
+                      <Save size={14} /> {savedPostId ? 'Rascunho salvo' : 'Salvar rascunho'}
                     </button>
                   </div>
                   <div className="bg-gray-800 rounded-lg p-4 max-h-64 overflow-y-auto">
@@ -943,7 +986,7 @@ export default function Conteudo() {
           {/* Filtros */}
           <div className="rounded-xl border border-gray-700 bg-gray-800/60 p-4">
             <p className="text-white text-sm font-medium mb-3">Filtros do historico</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
               <div>
                 <label className="block text-xs text-gray-400 mb-1">Plataforma</label>
                 <select value={filterPlatform} onChange={e => setFilterPlatform(e.target.value)}
@@ -961,6 +1004,14 @@ export default function Conteudo() {
                   <option value="published">Publicados</option>
                   <option value="scheduled">Agendados</option>
                   <option value="draft">Rascunhos</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Ordem por data</label>
+                <select value={sortOrder} onChange={e => setSortOrder(e.target.value as 'desc' | 'asc')}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
+                  <option value="desc">Mais recentes primeiro</option>
+                  <option value="asc">Mais antigos primeiro</option>
                 </select>
               </div>
             </div>
@@ -1009,7 +1060,7 @@ export default function Conteudo() {
                   <Copy size={13} /> {copiedPostId === post.id ? '✓ Copiado!' : 'Copiar'}
                 </button>
                 {post.status !== 'published' && (
-                  <button onClick={() => setPublishModal({ post })}
+                  <button onClick={() => { setScheduleDate(post.scheduledAt ? post.scheduledAt.slice(0, 16) : ''); setPublishModal({ post }); }}
                     className="flex items-center gap-1.5 bg-green-700 hover:bg-green-600 text-white text-sm px-3 py-1.5 rounded-lg transition-colors">
                     <Send size={13} /> {post.status === 'scheduled' ? 'Reagendar' : 'Publicar / Agendar'}
                   </button>

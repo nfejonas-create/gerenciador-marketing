@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Send, Clock, Calendar, CalendarDays } from 'lucide-react';
+import { Send, Clock, Calendar, CalendarDays, X, Copy } from 'lucide-react';
 import api from '../services/api';
 
 type Post = {
@@ -72,13 +72,57 @@ export default function Calendario() {
   const [loading, setLoading] = useState(true);
   const [filterPlatform, setFilterPlatform] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
+  const [scheduleModal, setScheduleModal] = useState<Post | null>(null);
+  const [scheduleDate, setScheduleDate] = useState('');
+  const [savingAction, setSavingAction] = useState<string | null>(null);
+  const [copiedPostId, setCopiedPostId] = useState<string | null>(null);
 
-  useEffect(() => {
+  async function loadPosts() {
+    setLoading(true);
     api.get('/content/posts')
       .then(r => setPosts(r.data))
       .catch(() => {})
       .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    loadPosts();
   }, []);
+
+  async function copyPost(post: Post) {
+    await navigator.clipboard.writeText([post.content, post.cta, post.hashtags].filter(Boolean).join('\n\n'));
+    setCopiedPostId(post.id);
+    setTimeout(() => setCopiedPostId(null), 2000);
+  }
+
+  async function saveSchedule(post: Post) {
+    if (!scheduleDate) return;
+    setSavingAction(post.id);
+    try {
+      await api.patch(`/content/posts/${post.id}`, { status: 'scheduled', scheduledAt: scheduleDate });
+      setScheduleModal(null);
+      setScheduleDate('');
+      await loadPosts();
+    } catch (e: any) {
+      alert(e.response?.data?.error || 'Erro ao reagendar');
+    } finally {
+      setSavingAction(null);
+    }
+  }
+
+  async function cancelSchedule(post: Post) {
+    if (!confirm('Cancelar agendamento? O post voltara para rascunho.')) return;
+    setSavingAction(post.id);
+    try {
+      await api.patch(`/content/posts/${post.id}`, { status: 'draft', scheduledAt: null });
+      await loadPosts();
+    } catch (e: any) {
+      alert(e.response?.data?.error || 'Erro ao cancelar agendamento');
+    } finally {
+      setSavingAction(null);
+    }
+  }
 
   const filtered = posts.filter(p => {
     const platOk = filterPlatform === 'all' || p.platform === filterPlatform;
@@ -87,9 +131,10 @@ export default function Calendario() {
   });
 
   // 1. Ordenar todos os posts: mais recente primeiro
-  const sorted = [...filtered].sort((a, b) =>
-    getRefDate(b).getTime() - getRefDate(a).getTime()
-  );
+  const sorted = [...filtered].sort((a, b) => {
+    const diff = getRefDate(a).getTime() - getRefDate(b).getTime();
+    return sortOrder === 'asc' ? diff : -diff;
+  });
 
   // 2. Agrupar por dia
   const byDay = new Map<string, Post[]>();
@@ -101,19 +146,43 @@ export default function Calendario() {
   });
 
   // 3. Dentro de cada dia, ordenar por horário crescente
-  byDay.forEach(dayPosts => dayPosts.sort((a, b) =>
-    getRefDate(a).getTime() - getRefDate(b).getTime()
-  ));
+  byDay.forEach(dayPosts => dayPosts.sort((a, b) => {
+    const diff = getRefDate(a).getTime() - getRefDate(b).getTime();
+    return sortOrder === 'asc' ? diff : -diff;
+  }));
 
-  // 4. Dias ordenados do mais recente ao mais antigo
-  const days = [...byDay.keys()].sort((a, b) => b.localeCompare(a));
+  const days = [...byDay.keys()].sort((a, b) => sortOrder === 'asc' ? a.localeCompare(b) : b.localeCompare(a));
 
   return (
     <div className="space-y-6">
+      {scheduleModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-md space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-white font-semibold">{scheduleModal.status === 'scheduled' ? 'Reagendar postagem' : 'Agendar postagem'}</h3>
+              <button onClick={() => setScheduleModal(null)} className="text-gray-500 hover:text-gray-300"><X size={18} /></button>
+            </div>
+            <div className="max-h-28 overflow-y-auto bg-gray-800 rounded-lg p-3">
+              <p className="text-gray-300 text-sm whitespace-pre-wrap">{scheduleModal.content}</p>
+            </div>
+            <input
+              type="datetime-local"
+              value={scheduleDate || (scheduleModal.scheduledAt ? scheduleModal.scheduledAt.slice(0, 16) : '')}
+              onChange={e => setScheduleDate(e.target.value)}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
+            />
+            <button onClick={() => saveSchedule(scheduleModal)} disabled={!scheduleDate || savingAction === scheduleModal.id}
+              className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white py-2.5 rounded-xl text-sm">
+              <Calendar size={14} /> {savingAction === scheduleModal.id ? 'Salvando...' : 'Confirmar data'}
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-white">Calendario</h1>
-          <p className="text-gray-400 text-sm">Posts por dia — do mais recente ao mais antigo</p>
+          <p className="text-gray-400 text-sm">Posts por dia com ações por postagem</p>
         </div>
         <div className="flex gap-2 flex-wrap">
           <select value={filterPlatform} onChange={e => setFilterPlatform(e.target.value)}
@@ -128,6 +197,11 @@ export default function Calendario() {
             <option value="published">Publicados</option>
             <option value="scheduled">Agendados</option>
             <option value="draft">Rascunhos</option>
+          </select>
+          <select value={sortOrder} onChange={e => setSortOrder(e.target.value as 'desc' | 'asc')}
+            className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
+            <option value="desc">Mais recentes primeiro</option>
+            <option value="asc">Mais antigos primeiro</option>
           </select>
         </div>
       </div>
@@ -198,6 +272,24 @@ export default function Calendario() {
                     </div>
                     {post.cta && <p className="text-blue-400 text-xs border-t border-gray-700 pt-2">{post.cta}</p>}
                     {post.hashtags && <p className="text-gray-600 text-xs">{post.hashtags}</p>}
+                    <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-700/70">
+                      <button onClick={() => copyPost(post)}
+                        className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg transition-colors ${copiedPostId === post.id ? 'bg-green-700 text-green-100' : 'bg-gray-700 hover:bg-gray-600 text-gray-300'}`}>
+                        <Copy size={12} /> {copiedPostId === post.id ? 'Copiado' : 'Copiar'}
+                      </button>
+                      {post.status !== 'published' && (
+                        <button onClick={() => { setScheduleModal(post); setScheduleDate(post.scheduledAt ? post.scheduledAt.slice(0, 16) : ''); }}
+                          className="flex items-center gap-1.5 bg-blue-700 hover:bg-blue-600 text-white text-xs px-2.5 py-1.5 rounded-lg">
+                          <Calendar size={12} /> {isScheduled ? 'Reagendar' : 'Agendar'}
+                        </button>
+                      )}
+                      {isScheduled && (
+                        <button onClick={() => cancelSchedule(post)} disabled={savingAction === post.id}
+                          className="flex items-center gap-1.5 bg-red-700 hover:bg-red-600 disabled:opacity-50 text-white text-xs px-2.5 py-1.5 rounded-lg">
+                          <X size={12} /> Cancelar
+                        </button>
+                      )}
+                    </div>
                   </div>
                 );
               })}

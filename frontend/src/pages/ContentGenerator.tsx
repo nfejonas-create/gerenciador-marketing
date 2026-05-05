@@ -16,6 +16,7 @@ interface Suggestion {
 
 interface GeneratedContent {
   id: string;
+  savedPostId?: string;
   text: string;
   hashtags: string[];
   readTime: number;
@@ -113,14 +114,23 @@ export default function ContentGenerator() {
       const hashtags = Array.isArray(data.hashtags)
         ? data.hashtags
         : String(data.hashtags || '').split(' ').filter(Boolean);
+      const text = data.content || data.text || '';
+      const saved = await api.post('/content/posts', {
+        platform: 'linkedin',
+        content: text,
+        cta: data.cta || null,
+        hashtags: hashtags.join(' '),
+        status: 'draft',
+      });
       setGenerated(prev => ({
         ...prev,
         [suggestion.id]: {
           id: suggestion.id,
-          text: data.content || data.text || '',
+          savedPostId: saved.data.id,
+          text,
           cta: data.cta || '',
           hashtags,
-          readTime: Math.max(1, Math.ceil(String(data.content || data.text || '').length / 900)),
+          readTime: Math.max(1, Math.ceil(String(text).length / 900)),
           template: 'post',
         },
       }));
@@ -151,14 +161,18 @@ export default function ContentGenerator() {
       const postToSchedule = Object.values(generated).find((item) => item.id === scheduleContentId);
       if (!postToSchedule) throw new Error('Conteúdo não encontrado para agendamento');
 
-      await api.post('/content/posts', {
-        platform: 'linkedin',
-        content: postToSchedule.text,
-        cta: postToSchedule.cta || null,
-        hashtags: postToSchedule.hashtags.join(' '),
-        status: 'scheduled',
-        scheduledAt: scheduleDate,
-      });
+      if (postToSchedule.savedPostId) {
+        await api.patch(`/content/posts/${postToSchedule.savedPostId}`, { status: 'scheduled', scheduledAt: scheduleDate });
+      } else {
+        await api.post('/content/posts', {
+          platform: 'linkedin',
+          content: postToSchedule.text,
+          cta: postToSchedule.cta || null,
+          hashtags: postToSchedule.hashtags.join(' '),
+          status: 'scheduled',
+          scheduledAt: scheduleDate,
+        });
+      }
       setShowScheduleModal(false);
       loadScheduled();
       alert('Agendado com sucesso!');
@@ -308,6 +322,11 @@ export default function ContentGenerator() {
                       onClick={async () => {
                         try {
                           const postToSave = generated[s.id];
+                          if (postToSave.savedPostId) {
+                            alert('Post ja esta salvo no historico!');
+                            window.location.href = '/conteudo';
+                            return;
+                          }
                           await api.post('/content/posts', {
                             platform: 'linkedin',
                             content: postToSave.text,
@@ -321,22 +340,22 @@ export default function ContentGenerator() {
                           alert(e.response?.data?.error || 'Erro ao salvar');
                         }
                       }}
-                      className="flex items-center gap-1 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white rounded text-xs"
+                      className={`flex items-center gap-1 px-3 py-1.5 rounded text-xs ${generated[s.id].savedPostId ? 'bg-green-700 text-green-100' : 'bg-gray-700 hover:bg-gray-600 text-white'}`}
                     >
-                      <Save size={12} /> Salvar no historico
+                      <Save size={12} /> {generated[s.id].savedPostId ? 'Salvo no historico' : 'Salvar no historico'}
                     </button>
                     <button
                       onClick={async () => {
                         try {
                           const postToSave = generated[s.id];
-                          const { data: savedPost } = await api.post('/content/posts', {
+                          const postId = postToSave.savedPostId || (await api.post('/content/posts', {
                             platform: 'linkedin',
                             content: postToSave.text,
                             cta: postToSave.cta || null,
                             hashtags: Array.isArray(postToSave.hashtags) ? postToSave.hashtags.join(' ') : postToSave.hashtags,
                             status: 'draft',
-                          });
-                          await api.post('/content/publish', { postId: savedPost.id });
+                          })).data.id;
+                          await api.post('/content/publish', { postId });
                           alert('✅ Post publicado!');
                         } catch (e: any) {
                           alert(e.response?.data?.error || 'Erro ao publicar');

@@ -50,9 +50,10 @@ export default function Dashboard() {
 
   const totals = (platform: string) => summary.find((s: any) => s.platform === platform)?._sum || {};
   const counts = (platform: string) => summary.find((s: any) => s.platform === platform)?._count?.id || 0;
+  const latestMetric = (platform: string) => [...metrics].filter((m: any) => m.platform === platform).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0] || {};
   const totalViews = summary.reduce((sum, s: any) => sum + (s._sum?.views || 0), 0);
   const totalEngagement = summary.reduce((sum, s: any) => sum + (s._sum?.likes || 0) + (s._sum?.comments || 0) + (s._sum?.shares || 0), 0);
-  const totalFollowers = summary.reduce((sum, s: any) => sum + (s._sum?.followers || 0), 0);
+  const totalFollowers = ['linkedin', 'facebook', 'site'].reduce((sum, platform) => sum + (latestMetric(platform).followers || 0), 0);
 
   const chartData = metrics.reduce((acc: any[], m) => {
     const date = new Date(m.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
@@ -71,7 +72,7 @@ export default function Dashboard() {
     platform,
     visualizacoes: totals(platform).views || 0,
     engajamento: (totals(platform).likes || 0) + (totals(platform).comments || 0) + (totals(platform).shares || 0),
-    seguidores: totals(platform).followers || 0,
+    seguidores: latestMetric(platform).followers || 0,
   }));
   const recentMetrics = [...metrics].slice(-10).reverse();
 
@@ -91,9 +92,9 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: 'Visualizações', value: totalViews, icon: Eye, color: 'text-blue-400' },
-          { label: 'Engajamento', value: totalEngagement, icon: TrendingUp, color: 'text-green-400' },
-          { label: 'Seguidores', value: totalFollowers, icon: Users, color: 'text-purple-400' },
+          { label: 'Views acumuladas', value: totalViews, icon: Eye, color: 'text-blue-400' },
+          { label: 'Engajamento acumulado', value: totalEngagement, icon: TrendingUp, color: 'text-green-400' },
+          { label: 'Seguidores atuais', value: totalFollowers, icon: Users, color: 'text-purple-400' },
           { label: 'Coletas', value: metrics.length, icon: RefreshCw, color: 'text-yellow-400' },
         ].map(({ label, value, icon: Icon, color }) => (
           <div key={label} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
@@ -147,7 +148,7 @@ export default function Dashboard() {
                     </div>
                     <div className="bg-gray-800 rounded-lg p-2 text-center">
                       <Users size={12} className="mx-auto text-indigo-400 mb-1" />
-                      <p className="text-white text-lg font-bold">{totals('facebook').followers || 0}</p>
+                      <p className="text-white text-lg font-bold">{latestMetric('facebook').followers || 0}</p>
                       <p className="text-gray-500 text-xs">Seguidores</p>
                     </div>
                     <div className="bg-gray-800 rounded-lg p-2 text-center">
