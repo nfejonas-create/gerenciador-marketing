@@ -17,6 +17,13 @@ interface Metric {
   date: string;
 }
 
+function buildAutoCollectorBookmarklet(info: WebhookInfo | null) {
+  if (!info) return 'Carregando token seguro...';
+
+  const scriptUrl = `${info.endpoint.replace('/metrics/linkedin-manual', '/metrics/linkedin-collector.js')}?userId=${encodeURIComponent(info.userId)}&metricsToken=${encodeURIComponent(info.metricsToken)}&v=${Date.now()}`;
+  return `javascript:(function(){var s=document.createElement('script');s.src=${JSON.stringify(scriptUrl)};s.async=true;document.body.appendChild(s);})();`;
+}
+
 function buildBookmarklet(info: WebhookInfo | null) {
   if (!info) return 'Carregando token seguro...';
 
@@ -52,7 +59,7 @@ function buildBookmarklet(info: WebhookInfo | null) {
 
 export default function LinkedInExtractor() {
   const [copied, setCopied] = useState(false);
-  const [activeTab, setActiveTab] = useState<'bookmarklet' | 'console' | 'api'>('bookmarklet');
+  const [activeTab, setActiveTab] = useState<'auto' | 'bookmarklet' | 'console' | 'api'>('auto');
   const [webhook, setWebhook] = useState<WebhookInfo | null>(null);
   const [latest, setLatest] = useState<Metric | null>(null);
   const [loading, setLoading] = useState(true);
@@ -75,11 +82,12 @@ export default function LinkedInExtractor() {
     load();
   }, []);
 
+  const autoBookmarklet = useMemo(() => buildAutoCollectorBookmarklet(webhook), [webhook]);
   const bookmarklet = useMemo(() => buildBookmarklet(webhook), [webhook]);
   const consoleScript = useMemo(() => bookmarklet.replace(/^javascript:/, ''), [bookmarklet]);
 
-  async function copyBookmarklet() {
-    await navigator.clipboard.writeText(bookmarklet);
+  async function copyText(text: string) {
+    await navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
@@ -105,6 +113,7 @@ export default function LinkedInExtractor() {
 
       <div className="flex gap-2 flex-wrap">
         {[
+          { id: 'auto', label: 'Automático', icon: Zap },
           { id: 'bookmarklet', label: 'Bookmarklet Seguro', icon: Bookmark },
           { id: 'console', label: 'Console F12', icon: Code },
           { id: 'api', label: 'API / Automação', icon: Zap },
@@ -119,6 +128,49 @@ export default function LinkedInExtractor() {
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-4">
         {loading ? (
           <div className="py-10 flex justify-center"><Loader2 className="animate-spin text-blue-500" /></div>
+        ) : activeTab === 'auto' ? (
+          <>
+            <div className="flex items-start gap-3 text-blue-300 bg-blue-900/20 border border-blue-800 rounded-lg p-4">
+              <Zap size={20} className="mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="font-medium">Coleta automática enquanto o LinkedIn Analytics estiver aberto</p>
+                <p className="text-sm text-blue-300/80 mt-1">Instale este favorito uma vez. Ao clicar nele dentro do LinkedIn Analytics, o MktManager coleta os números, grava no banco e repete a cada 5 minutos enquanto a aba estiver aberta.</p>
+              </div>
+            </div>
+            <ol className="space-y-2 text-gray-300 text-sm list-decimal list-inside">
+              <li>Copie o código automático abaixo.</li>
+              <li>Crie um favorito no navegador com esse código no campo URL.</li>
+              <li>Abra <a href="https://www.linkedin.com/analytics/profile-views/" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline inline-flex items-center gap-1">LinkedIn Analytics <ExternalLink size={12} /></a>.</li>
+              <li>Clique no favorito "MktManager LinkedIn Auto".</li>
+              <li>Deixe a aba aberta para atualizar o dashboard automaticamente.</li>
+            </ol>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="bg-gray-800 border border-gray-700 rounded-lg p-3">
+                <p className="text-sm font-medium text-white">Grava no banco</p>
+                <p className="text-xs text-gray-500 mt-1">Usa token limitado só para métricas deste usuário.</p>
+              </div>
+              <div className="bg-gray-800 border border-gray-700 rounded-lg p-3">
+                <p className="text-sm font-medium text-white">Evita duplicar</p>
+                <p className="text-xs text-gray-500 mt-1">A coleta do dia atualiza a linha existente.</p>
+              </div>
+              <div className="bg-gray-800 border border-gray-700 rounded-lg p-3">
+                <p className="text-sm font-medium text-white">Dashboard automático</p>
+                <p className="text-xs text-gray-500 mt-1">Os gráficos usam os dados salvos em Métricas.</p>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-sm text-gray-400">Favorito automático</label>
+                <button onClick={() => copyText(autoBookmarklet)}
+                  className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg transition-colors ${copied ? 'bg-green-700 text-green-200' : 'bg-gray-700 hover:bg-gray-600 text-gray-300'}`}>
+                  {copied ? <CheckCircle size={14} /> : <Copy size={14} />}
+                  {copied ? 'Copiado!' : 'Copiar automático'}
+                </button>
+              </div>
+              <textarea readOnly value={autoBookmarklet}
+                className="w-full h-28 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-gray-400 text-xs font-mono resize-none" />
+            </div>
+          </>
         ) : activeTab === 'bookmarklet' ? (
           <>
             <div className="flex items-start gap-3 text-yellow-400 bg-yellow-900/20 border border-yellow-800 rounded-lg p-4">
@@ -138,7 +190,7 @@ export default function LinkedInExtractor() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-sm text-gray-400">Código do Bookmarklet</label>
-                <button onClick={copyBookmarklet}
+                <button onClick={() => copyText(bookmarklet)}
                   className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg transition-colors ${copied ? 'bg-green-700 text-green-200' : 'bg-gray-700 hover:bg-gray-600 text-gray-300'}`}>
                   {copied ? <CheckCircle size={14} /> : <Copy size={14} />}
                   {copied ? 'Copiado!' : 'Copiar código'}
