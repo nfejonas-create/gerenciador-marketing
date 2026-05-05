@@ -4,6 +4,13 @@ import { PrismaClient } from '@prisma/client';
 import Anthropic from '@anthropic-ai/sdk';
 import { AuthRequest } from '../middleware/authGuard';
 import { searchKnowledgeForTopic } from './knowledgeController';
+import {
+  fetchGoogleNewsSuggestions,
+  fetchLinkedInNewsSuggestions,
+  getCachedSuggestions,
+  saveSuggestions,
+} from '../services/suggestionsService';
+import { normalizeSuggestionViews, toSuggestionsResponse } from '../services/suggestionsContract';
 
 const prisma = new PrismaClient();
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -642,39 +649,52 @@ Retorne SOMENTE JSON:
   }
 }
 
-// Sugestões de conteúdo (Google Trends / LinkedIn News simulado)
+// Sugestões de conteúdo (Google News RSS como radar de tendências)
 export async function getSuggestions(req: AuthRequest, res: Response) {
   try {
-    const { source } = req.query;
-    
-    // Sugestões estáticas temporárias
-    const suggestions = [
-      {
-        id: '1',
-        headline: 'NBR 5410: Principais mudanças para 2026',
-        snippet: 'Nova norma técnica traz atualizações importantes',
-        source: 'google'
-      },
-      {
-        id: '2', 
-        headline: 'Energia solar: Custo-benefício em indústrias',
-        snippet: 'Economia de até 40% na conta de luz',
-        source: 'google'
-      },
-      {
-        id: '3',
-        headline: 'Manutenção preventiva: Evite acidentes',
-        snippet: 'Checklist essencial para segurança',
-        source: 'linkedin'
+    const source = req.query.source === 'linkedin' ? 'linkedin' : 'google';
+    const date = String(req.query.date || new Date().toISOString());
+
+    const user = await prisma.user.findUnique({
+      where: { id: req.effectiveUserId! },
+      select: { settings: true, name: true },
+    });
+    const settings = (user?.settings as any) || {};
+    const niche = String(settings.niche || settings.contentNiche || 'eletricista automação industrial energia elétrica Brasil');
+    const audience = String(settings.audience || settings.targetAudience || '');
+    const query = [niche, audience].filter(Boolean).join(' ');
+
+    let suggestions = await getCachedSuggestions(req.effectiveUserId!, source, date);
+
+    if (suggestions.length === 0) {
+      suggestions = source === 'linkedin'
+        ? await fetchLinkedInNewsSuggestions(query, date)
+        : await fetchGoogleNewsSuggestions(query, date);
+
+      if (suggestions.length > 0) {
+        await saveSuggestions(req.effectiveUserId!, source, suggestions);
+        suggestions = await getCachedSuggestions(req.effectiveUserId!, source, date);
       }
-    ];
-    
-    if (source && source !== 'all') {
-      return res.json(suggestions.filter(s => s.source === source));
     }
-    
-    return res.json(suggestions);
+
+    const normalized = normalizeSuggestionViews(source, suggestions);
+    return res.json(toSuggestionsResponse(normalized));
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    console.error('[getSuggestions]', err);
+    const fallback = normalizeSuggestionViews('fallback', [
+      {
+        headline: 'NR-10 e segurança elétrica continuam como tema de alta demanda',
+        url: 'https://manualdoeletricista.manus.space/',
+        source: 'fallback',
+        snippet: 'Use este tema como pauta segura enquanto o radar externo estiver indisponível.',
+      },
+      {
+        headline: 'Automação industrial e CLP para eletricistas práticos',
+        url: 'https://manualdoeletricista.manus.space/',
+        source: 'fallback',
+        snippet: 'Tema evergreen alinhado ao Manual do Eletricista.',
+      },
+    ]);
+    return res.json(toSuggestionsResponse(fallback));
   }
 }

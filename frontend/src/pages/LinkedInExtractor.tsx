@@ -1,81 +1,95 @@
-import { useState } from 'react';
-import { Bookmark, Copy, CheckCircle, ExternalLink, Code, Zap, Play } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Bookmark, Copy, CheckCircle, ExternalLink, Code, Zap, Loader2 } from 'lucide-react';
+import api from '../services/api';
 
-const BOOKMARKLET_CODE = `javascript:(function(){
-  const extractNumber = (selector) => {
-    const el = document.querySelector(selector);
-    return el ? parseInt(el.innerText.replace(/[^0-9]/g, '')) || 0 : 0;
-  };
-  
-  const getText = (selector) => {
-    const el = document.querySelector(selector);
-    return el ? el.innerText.trim() : '';
-  };
-  
-  const linkedinData = {
-    plataforma: 'LinkedIn',
-    perfil: getText('.profile-card__name') || getText('h1') || 'Perfil',
-    visualizacoes: extractNumber('[data-test-id="profile-views-count"]') || extractNumber('.analytics-count'),
-    recrutadores: extractNumber('[data-test-id="recruiter-views-count"]') || 0,
-    posts: extractNumber('[data-test-id="posts-count"]') || document.querySelectorAll('.feed-shared-update-v2').length,
-    seguidores: extractNumber('[data-test-id="follower-count"]') || extractNumber('.profile-card__badge-count'),
-    engajamento: extractNumber('[data-test-id="engagement-count"]') || 0,
-    data: new Date().toISOString(),
-    url: window.location.href
-  };
-  
-  console.log('📊 Dados LinkedIn extraídos:', linkedinData);
-  
-  fetch('https://gerenciador-marketing-backend.onrender.com/metrics/linkedin-manual', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(linkedinData)
-  })
-  .then(r => r.json())
-  .then(data => {
-    alert('✅ Dados sincronizados com sucesso!\\n\\n' + 
-          'Visualizações: ' + linkedinData.visualizacoes + '\\n' +
-          'Posts: ' + linkedinData.posts + '\\n' +
-          'Seguidores: ' + linkedinData.seguidores);
-  })
-  .catch(e => {
-    console.error('Erro:', e);
-    alert('❌ Erro ao sincronizar.\\nDados copiados para o console (F12).');
+interface WebhookInfo {
+  endpoint: string;
+  userId: string;
+  metricsToken: string;
+}
+
+interface Metric {
+  views: number;
+  likes: number;
+  shares: number;
+  followers: number;
+  reach: number;
+  date: string;
+}
+
+function buildBookmarklet(info: WebhookInfo | null) {
+  if (!info) return 'Carregando token seguro...';
+
+  const payload = JSON.stringify({
+    endpoint: info.endpoint,
+    userId: info.userId,
+    metricsToken: info.metricsToken,
   });
+
+  return `javascript:(function(){
+  const cfg=${payload};
+  const numberFromText=(text)=>parseInt(String(text||'').replace(/[^0-9]/g,''),10)||0;
+  const pick=(selectors)=>selectors.map(s=>document.querySelector(s)).find(Boolean);
+  const extract=(selectors)=>numberFromText((pick(selectors)||{}).innerText);
+  const metricCards=Array.from(document.querySelectorAll('section,article,div')).map(el=>el.innerText||'').join('\\n').toLowerCase();
+  const linkedinData={
+    plataforma:'LinkedIn',
+    userId:cfg.userId,
+    metricsToken:cfg.metricsToken,
+    perfil:(document.querySelector('h1')||{}).innerText||document.title||'Perfil LinkedIn',
+    visualizacoes:extract(['[data-test-id="profile-views-count"]','[data-test-id*="profile-view"]','.analytics-count'])||numberFromText((metricCards.match(/([0-9.,]+)\\s*(visualiza|views)/)||[])[1]),
+    recrutadores:extract(['[data-test-id="recruiter-views-count"]'])||numberFromText((metricCards.match(/([0-9.,]+)\\s*(recrutador|recruiter)/)||[])[1]),
+    posts:extract(['[data-test-id="posts-count"]'])||document.querySelectorAll('.feed-shared-update-v2,.update-components-actor').length,
+    seguidores:extract(['[data-test-id="follower-count"]'])||numberFromText((metricCards.match(/([0-9.,]+)\\s*(seguidor|followers)/)||[])[1]),
+    engajamento:extract(['[data-test-id="engagement-count"]'])||numberFromText((metricCards.match(/([0-9.,]+)\\s*(engajamento|engagement|reaction)/)||[])[1]),
+    data:new Date().toISOString(),
+    url:window.location.href
+  };
+  fetch(cfg.endpoint,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(linkedinData)});
+  alert('Métricas enviadas ao MktManager. Abra o dashboard para confirmar.\\n\\nVisualizações: '+linkedinData.visualizacoes+'\\nSeguidores: '+linkedinData.seguidores+'\\nPosts: '+linkedinData.posts);
 })();`;
-
-const CONSOLE_SCRIPT = `// Script para extrair métricas do LinkedIn
-// Execute no console (F12) na página de analytics do LinkedIn
-
-const extractNumber = (selector) => {
-  const el = document.querySelector(selector);
-  return el ? parseInt(el.innerText.replace(/[^0-9]/g, '')) || 0 : 0;
-};
-
-const linkedinData = {
-  plataforma: 'LinkedIn',
-  visualizacoes: extractNumber('[data-test-id="profile-views-count"]'),
-  recrutadores: extractNumber('[data-test-id="recruiter-views-count"]'),
-  posts: document.querySelectorAll('.feed-shared-update-v2').length,
-  seguidores: extractNumber('[data-test-id="follower-count"]'),
-  data: new Date().toISOString()
-};
-
-console.log('📊 Dados extraídos:', linkedinData);
-
-// Copiar para área de transferência
-copy(JSON.stringify(linkedinData, null, 2));
-console.log('✅ Dados copiados! Cole no dashboard.');`;
+}
 
 export default function LinkedInExtractor() {
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<'bookmarklet' | 'console' | 'api'>('bookmarklet');
+  const [webhook, setWebhook] = useState<WebhookInfo | null>(null);
+  const [latest, setLatest] = useState<Metric | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  function copyBookmarklet() {
-    navigator.clipboard.writeText(BOOKMARKLET_CODE);
+  useEffect(() => {
+    async function load() {
+      setLoading(true);
+      try {
+        const [info, metrics] = await Promise.all([
+          api.get('/metrics/webhook-info'),
+          api.get('/metrics?platform=linkedin&days=90'),
+        ]);
+        setWebhook(info.data);
+        const list = Array.isArray(metrics.data) ? metrics.data : [];
+        setLatest(list[list.length - 1] || null);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, []);
+
+  const bookmarklet = useMemo(() => buildBookmarklet(webhook), [webhook]);
+  const consoleScript = useMemo(() => bookmarklet.replace(/^javascript:/, ''), [bookmarklet]);
+
+  async function copyBookmarklet() {
+    await navigator.clipboard.writeText(bookmarklet);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
+
+  const cards = [
+    { label: 'Visualizações', value: latest?.views ?? '—', icon: '👁️' },
+    { label: 'Engajamento', value: latest?.likes ?? '—', icon: '⚡' },
+    { label: 'Seguidores', value: latest?.followers ?? '—', icon: '👥' },
+    { label: 'Posts', value: latest?.shares ?? '—', icon: '📝' },
+  ];
 
   return (
     <div className="space-y-6">
@@ -85,183 +99,84 @@ export default function LinkedInExtractor() {
             <Bookmark className="text-blue-400" />
             Extrator LinkedIn
           </h1>
-          <p className="text-gray-400 text-sm">
-            Sincronize métricas do seu perfil LinkedIn com o dashboard
-          </p>
+          <p className="text-gray-400 text-sm">Fallback seguro para métricas quando Windsor/LinkedIn API não entregar dados do perfil pessoal.</p>
         </div>
       </div>
 
-      {/* Abas de opções */}
       <div className="flex gap-2 flex-wrap">
         {[
-          { id: 'bookmarklet', label: '⭐ Bookmarklet (Recomendado)', icon: Bookmark },
-          { id: 'console', label: 'Console F12 (Manual)', icon: Code },
-          { id: 'api', label: 'API/Zapier (Automático)', icon: Zap },
+          { id: 'bookmarklet', label: 'Bookmarklet Seguro', icon: Bookmark },
+          { id: 'console', label: 'Console F12', icon: Code },
+          { id: 'api', label: 'API / Automação', icon: Zap },
         ].map(({ id, label, icon: Icon }) => (
-          <button
-            key={id}
-            onClick={() => setActiveTab(id as any)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              activeTab === id
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
-            }`}
-          >
-            <Icon size={16} />
-            {label}
+          <button key={id} onClick={() => setActiveTab(id as any)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === id ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}>
+            <Icon size={16} /> {label}
           </button>
         ))}
       </div>
 
-      {/* Conteúdo da aba ativa */}
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-4">
-        {activeTab === 'bookmarklet' && (
+        {loading ? (
+          <div className="py-10 flex justify-center"><Loader2 className="animate-spin text-blue-500" /></div>
+        ) : activeTab === 'bookmarklet' ? (
           <>
             <div className="flex items-start gap-3 text-yellow-400 bg-yellow-900/20 border border-yellow-800 rounded-lg p-4">
               <Zap size={20} className="mt-0.5 flex-shrink-0" />
               <div>
-                <p className="font-medium">Método mais rápido e prático</p>
-                <p className="text-sm text-yellow-500/80 mt-1">
-                  Funciona em qualquer navegador. Basta arrastar o código para a barra de favoritos e clicar quando estiver no LinkedIn.
-                </p>
+                <p className="font-medium">Método rápido com token limitado</p>
+                <p className="text-sm text-yellow-500/80 mt-1">O código só grava métricas para o seu usuário. Não publica, não lê dados do app e não altera tokens de redes sociais.</p>
               </div>
             </div>
-
-            <div className="space-y-3">
-              <h3 className="font-semibold text-white">Passo a passo:</h3>
-              <ol className="space-y-2 text-gray-300 text-sm list-decimal list-inside">
-                <li>Abra seu LinkedIn Analytics: <a href="https://www.linkedin.com/analytics/profile-views/" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline inline-flex items-center gap-1">linkedin.com/analytics <ExternalLink size={12} /></a></li>
-                <li>Copie o código abaixo (clique no botão "Copiar código")</li>
-                <li>Crie um novo favorito no navegador (Ctrl+D ou Cmd+D)</li>
-                <li>Edite o favorito e cole o código no campo URL</li>
-                <li>Clique no favorito sempre que quiser sincronizar os dados</li>
-              </ol>
-            </div>
-
+            <ol className="space-y-2 text-gray-300 text-sm list-decimal list-inside">
+              <li>Abra <a href="https://www.linkedin.com/analytics/profile-views/" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline inline-flex items-center gap-1">LinkedIn Analytics <ExternalLink size={12} /></a></li>
+              <li>Copie o bookmarklet abaixo.</li>
+              <li>Crie/edite um favorito e cole o código no campo URL.</li>
+              <li>Clique no favorito dentro do LinkedIn Analytics.</li>
+              <li>Volte ao dashboard para ver a nova métrica.</li>
+            </ol>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-sm text-gray-400">Código do Bookmarklet</label>
-                <button
-                  onClick={copyBookmarklet}
-                  className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg transition-colors ${
-                    copied ? 'bg-green-700 text-green-200' : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
-                  }`}
-                >
+                <button onClick={copyBookmarklet}
+                  className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg transition-colors ${copied ? 'bg-green-700 text-green-200' : 'bg-gray-700 hover:bg-gray-600 text-gray-300'}`}>
                   {copied ? <CheckCircle size={14} /> : <Copy size={14} />}
                   {copied ? 'Copiado!' : 'Copiar código'}
                 </button>
               </div>
-              <textarea
-                readOnly
-                value={BOOKMARKLET_CODE}
-                className="w-full h-32 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-gray-400 text-xs font-mono resize-none"
-              />
-            </div>
-
-            <div className="bg-blue-900/20 border border-blue-800 rounded-lg p-4">
-              <p className="text-blue-400 text-sm">
-                <strong>Dica:</strong> Você pode criar múltiplos bookmarks para diferentes páginas do LinkedIn (Analytics, Posts, Perfil).
-              </p>
+              <textarea readOnly value={bookmarklet}
+                className="w-full h-36 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-gray-400 text-xs font-mono resize-none" />
             </div>
           </>
-        )}
-
-        {activeTab === 'console' && (
+        ) : activeTab === 'console' ? (
           <>
-            <div className="flex items-start gap-3 text-gray-400 bg-gray-800 border border-gray-700 rounded-lg p-4">
-              <Code size={20} className="mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium text-white">Extração manual via console</p>
-                <p className="text-sm text-gray-500 mt-1">
-                  Útil para testes ou quando o bookmarklet não funcionar. Execute o código no console do navegador (F12).
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <h3 className="font-semibold text-white">Como usar:</h3>
-              <ol className="space-y-2 text-gray-300 text-sm list-decimal list-inside">
-                <li>Abra o LinkedIn Analytics</li>
-                <li>Pressione F12 para abrir o console</li>
-                <li>Cole o código abaixo e pressione Enter</li>
-                <li>Os dados serão copiados automaticamente</li>
-                <li>Cole no dashboard em "Importar Métricas"</li>
-              </ol>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm text-gray-400">Script do Console</label>
-              <textarea
-                readOnly
-                value={CONSOLE_SCRIPT}
-                className="w-full h-48 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-gray-400 text-xs font-mono resize-none"
-              />
-            </div>
+            <p className="text-gray-400 text-sm">Cole no console do LinkedIn Analytics se preferir não criar favorito.</p>
+            <textarea readOnly value={consoleScript}
+              className="w-full h-64 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-gray-400 text-xs font-mono resize-none" />
           </>
-        )}
-
-        {activeTab === 'api' && (
+        ) : (
           <>
-            <div className="flex items-start gap-3 text-purple-400 bg-purple-900/20 border border-purple-800 rounded-lg p-4">
-              <Zap size={20} className="mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium">Automação completa (requer configuração)</p>
-                <p className="text-sm text-purple-500/80 mt-1">
-                  Use Zapier, Make.com ou n8n para agendar a extração automática de métricas.
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <h3 className="font-semibold text-white mb-2">Opção A: Zapier (Mais fácil)</h3>
-                <ol className="space-y-1 text-gray-300 text-sm list-decimal list-inside">
-                  <li>Crie uma conta em <a href="https://zapier.com" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">zapier.com</a></li>
-                  <li>Configure um "Zap" com trigger "Schedule" (diário)</li>
-                  <li>Use "Webhooks by Zapier" para POST em nossa API</li>
-                  <li>Endpoint: <code className="bg-gray-800 px-1 rounded">POST /metrics/linkedin-webhook</code></li>
-                </ol>
-              </div>
-
-              <div>
-                <h3 className="font-semibold text-white mb-2">Opção B: API Direta (Para desenvolvedores)</h3>
-                <div className="bg-gray-800 rounded-lg p-3 space-y-2">
-                  <code className="text-xs text-gray-400 block">POST https://gerenciador-marketing-backend.onrender.com/metrics/linkedin-manual</code>
-                  <pre className="text-xs text-gray-400 overflow-x-auto">
-{`{
-  "plataforma": "LinkedIn",
-  "visualizacoes": 708,
-  "recrutadores": 1,
-  "posts": 27,
-  "seguidores": 150,
-  "data": "2026-01-15T10:00:00Z"
-}`}
-                  </pre>
-                </div>
-              </div>
-
-              <div className="bg-yellow-900/20 border border-yellow-800 rounded-lg p-4">
-                <p className="text-yellow-400 text-sm">
-                  <strong>Nota:</strong> A API do LinkedIn para perfis pessoais é limitada. 
-                  Para métricas completas, considere criar uma <strong>LinkedIn Company Page</strong> 
-                  e usar a API oficial de marketing.
-                </p>
-              </div>
+            <p className="text-purple-300 text-sm">Para automações externas, use o mesmo endpoint e envie `userId` + `metricsToken` no corpo.</p>
+            <div className="bg-gray-800 rounded-lg p-3 space-y-2">
+              <code className="text-xs text-gray-400 block">POST {webhook?.endpoint}</code>
+              <pre className="text-xs text-gray-400 overflow-x-auto">{JSON.stringify({
+                plataforma: 'LinkedIn',
+                userId: webhook?.userId,
+                metricsToken: webhook?.metricsToken,
+                visualizacoes: 708,
+                seguidores: 150,
+                engajamento: 12,
+                data: new Date().toISOString(),
+              }, null, 2)}</pre>
             </div>
           </>
         )}
       </div>
 
-      {/* Métricas já sincronizadas */}
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
-        <h3 className="font-semibold text-white mb-4">Última Sincronização</h3>
+        <h3 className="font-semibold text-white mb-4">Última Sincronização LinkedIn</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[
-            { label: 'Visualizações', value: '—', icon: '👁️' },
-            { label: 'Posts', value: '—', icon: '📝' },
-            { label: 'Seguidores', value: '—', icon: '👥' },
-            { label: 'Recrutadores', value: '—', icon: '💼' },
-          ].map((metric) => (
+          {cards.map((metric) => (
             <div key={metric.label} className="bg-gray-800 rounded-lg p-4 text-center">
               <span className="text-2xl">{metric.icon}</span>
               <p className="text-2xl font-bold text-white mt-1">{metric.value}</p>
@@ -270,7 +185,7 @@ export default function LinkedInExtractor() {
           ))}
         </div>
         <p className="text-gray-500 text-sm mt-4 text-center">
-          Use o bookmarklet ou console para sincronizar seus dados reais do LinkedIn
+          {latest ? `Atualizado em ${new Date(latest.date).toLocaleString('pt-BR')}` : 'Nenhuma métrica LinkedIn sincronizada ainda.'}
         </p>
       </div>
     </div>

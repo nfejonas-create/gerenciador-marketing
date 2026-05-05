@@ -20,12 +20,13 @@ interface GeneratedContent {
   hashtags: string[];
   readTime: number;
   template: string;
+  cta?: string;
 }
 
 interface ScheduledItem {
   id: string;
   content: string;
-  source: string;
+  source?: string;
   headline: string;
   publishAt: string;
   recurrence: string;
@@ -60,9 +61,10 @@ export default function ContentGenerator() {
     setLoadingSuggestions(true);
     try {
       const { data } = await api.get(`/content/suggestions?source=${source}`);
-      setSuggestions(data.suggestions || []);
+      setSuggestions(Array.isArray(data) ? data : (data.suggestions || []));
     } catch (err) {
       console.error('Erro ao carregar sugestões:', err);
+      setSuggestions([]);
     } finally {
       setLoadingSuggestions(false);
     }
@@ -72,10 +74,23 @@ export default function ContentGenerator() {
   const loadScheduled = async () => {
     setLoadingScheduled(true);
     try {
-      const { data } = await api.get('/content-generator/scheduled');
-      setScheduled(data || []);
+      const { data } = await api.get('/content/posts');
+      const items = (Array.isArray(data) ? data : [])
+        .filter((post: any) => post.status === 'scheduled')
+        .map((post: any) => ({
+          id: post.id,
+          content: post.content,
+          source: post.source || post.platform || 'linkedin',
+          headline: post.content,
+          publishAt: post.scheduledAt,
+          recurrence: 'none',
+          platform: post.platform,
+          status: post.status,
+        }));
+      setScheduled(items);
     } catch (err) {
       console.error('Erro ao carregar agendamentos:', err);
+      setScheduled([]);
     } finally {
       setLoadingScheduled(false);
     }
@@ -91,11 +106,24 @@ export default function ContentGenerator() {
     setGeneratingId(suggestion.id);
     try {
       const { data } = await api.post('/content/generate', {
-        suggestionId: suggestion.id,
-        source: activeTab,
-        template: 'post',
+        topic: `${suggestion.headline}\n\n${suggestion.snippet || ''}`,
+        platform: 'linkedin',
+        tone: activeTab === 'google' ? 'Atual, prático e ligado ao assunto do momento' : 'Profissional e orientado a negócios',
       });
-      setGenerated(prev => ({ ...prev, [suggestion.id]: data }));
+      const hashtags = Array.isArray(data.hashtags)
+        ? data.hashtags
+        : String(data.hashtags || '').split(' ').filter(Boolean);
+      setGenerated(prev => ({
+        ...prev,
+        [suggestion.id]: {
+          id: suggestion.id,
+          text: data.content || data.text || '',
+          cta: data.cta || '',
+          hashtags,
+          readTime: Math.max(1, Math.ceil(String(data.content || data.text || '').length / 900)),
+          template: 'post',
+        },
+      }));
     } catch (err: any) {
       alert('Erro ao gerar: ' + (err.response?.data?.error || err.message));
     } finally {
@@ -120,11 +148,16 @@ export default function ContentGenerator() {
     if (!scheduleContentId || !scheduleDate) return;
     setScheduling(true);
     try {
-      await api.post('/content-generator/schedule', {
-        contentId: scheduleContentId,
-        publishAt: scheduleDate,
-        recurrence: scheduleRecurrence,
+      const postToSchedule = Object.values(generated).find((item) => item.id === scheduleContentId);
+      if (!postToSchedule) throw new Error('Conteúdo não encontrado para agendamento');
+
+      await api.post('/content/posts', {
         platform: 'linkedin',
+        content: postToSchedule.text,
+        cta: postToSchedule.cta || null,
+        hashtags: postToSchedule.hashtags.join(' '),
+        status: 'scheduled',
+        scheduledAt: scheduleDate,
       });
       setShowScheduleModal(false);
       loadScheduled();
@@ -140,7 +173,7 @@ export default function ContentGenerator() {
   const cancelSchedule = async (id: string) => {
     if (!confirm('Cancelar este agendamento?')) return;
     try {
-      await api.delete(`/content-generator/scheduled/${id}`);
+      await api.patch(`/content/posts/${id}`, { status: 'draft' });
       loadScheduled();
     } catch (err: any) {
       alert('Erro: ' + (err.response?.data?.error || err.message));
@@ -242,6 +275,11 @@ export default function ContentGenerator() {
                     className="w-full bg-transparent text-gray-200 text-sm resize-none outline-none"
                     rows={6}
                   />
+                  {generated[s.id].cta && (
+                    <div className="bg-blue-900/30 border border-blue-800 rounded-lg p-3">
+                      <p className="text-blue-300 text-xs font-medium">CTA: {generated[s.id].cta}</p>
+                    </div>
+                  )}
                   
                   <div className="flex items-center gap-2 text-xs text-blue-400">
                     {(Array.isArray(generated[s.id].hashtags)
@@ -253,7 +291,7 @@ export default function ContentGenerator() {
 
                   <div className="flex gap-2 pt-2">
                     <button
-                      onClick={() => copyText(generated[s.id].text + '\n\n' + (typeof generated[s.id].hashtags === 'string' ? generated[s.id].hashtags : generated[s.id].hashtags.join(' ')))}
+                      onClick={() => copyText([generated[s.id].text, generated[s.id].cta, generated[s.id].hashtags.join(' ')].filter(Boolean).join('\n\n'))}
                       className="flex items-center gap-1 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded text-xs"
                     >
                       <Copy size={12} /> Copiar
@@ -273,6 +311,7 @@ export default function ContentGenerator() {
                           await api.post('/content/posts', {
                             platform: 'linkedin',
                             content: postToSave.text,
+                            cta: postToSave.cta || null,
                             hashtags: Array.isArray(postToSave.hashtags) ? postToSave.hashtags.join(' ') : postToSave.hashtags,
                             status: 'draft',
                           });
@@ -293,6 +332,7 @@ export default function ContentGenerator() {
                           const { data: savedPost } = await api.post('/content/posts', {
                             platform: 'linkedin',
                             content: postToSave.text,
+                            cta: postToSave.cta || null,
                             hashtags: Array.isArray(postToSave.hashtags) ? postToSave.hashtags.join(' ') : postToSave.hashtags,
                             status: 'draft',
                           });

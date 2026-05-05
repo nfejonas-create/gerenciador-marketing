@@ -2,8 +2,18 @@ import { Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import axios from 'axios';
 import { AuthRequest } from '../middleware/authGuard';
+import { createMetricsToken, isValidMetricsToken } from '../services/metricsToken';
 
 const prisma = new PrismaClient();
+
+function getBody(req: AuthRequest) {
+  if (typeof req.body !== 'string') return req.body || {};
+  try {
+    return JSON.parse(req.body);
+  } catch {
+    return {};
+  }
+}
 
 export async function getMetrics(req: AuthRequest, res: Response) {
   const { platform, days = '30' } = req.query;
@@ -19,9 +29,34 @@ export async function getMetricsSummary(req: AuthRequest, res: Response) {
   const metrics = await prisma.metric.groupBy({
     by: ['platform'],
     where: { userId: req.effectiveUserId! },
-    _sum: { views: true, likes: true, comments: true, shares: true, followers: true },
+    _sum: { views: true, likes: true, comments: true, shares: true, followers: true, reach: true },
+    _count: { id: true },
   });
   return res.json(metrics);
+}
+
+export async function getMetricsWebhookInfo(req: AuthRequest, res: Response) {
+  const user = await prisma.user.findUnique({
+    where: { id: req.effectiveUserId! },
+    select: { settings: true },
+  });
+  const settings = (user?.settings as any) || {};
+  const metricsToken = settings.metricsWebhookToken || createMetricsToken();
+
+  if (!settings.metricsWebhookToken) {
+    await prisma.user.update({
+      where: { id: req.effectiveUserId! },
+      data: { settings: { ...settings, metricsWebhookToken: metricsToken } },
+    });
+  }
+
+  return res.json({
+    endpoint: `${process.env.PUBLIC_API_URL || process.env.BACKEND_URL || 'https://gerenciador-marketing-backend.onrender.com'}/metrics/linkedin-manual`,
+    userId: req.effectiveUserId!,
+    metricsToken,
+    auth: 'token limitado para gravar metricas deste usuario',
+    requiredFields: ['plataforma', 'userId', 'metricsToken', 'visualizacoes', 'seguidores', 'engajamento', 'data'],
+  });
 }
 
 // ─── Facebook Graph API Metrics ─────────────────────────────────────────────
@@ -45,22 +80,22 @@ interface FacebookPageMetrics {
 export async function getFacebookMetrics(req: AuthRequest, res: Response) {
   try {
     const { pageId, accessToken } = req.body;
-    
+
     if (!pageId || !accessToken) {
       return res.status(400).json({ error: 'Page ID e Access Token são obrigatórios' });
     }
 
     const graphApiUrl = 'https://graph.facebook.com/v20.0';
     const url = `${graphApiUrl}/${pageId}?fields=name,fan_count,followers_count,posts.limit(10){id,message,created_time,shares,likes.summary(true),comments.summary(true)}&access_token=${accessToken}`;
-    
+
     const { data } = await axios.get(url);
-    
+
     if (data.error) {
       throw new Error(data.error.message);
     }
 
     const posts = data.posts?.data || [];
-    
+
     const metrics: FacebookPageMetrics = {
       pageName: data.name,
       followers: data.followers_count || 0,
@@ -107,19 +142,40 @@ export async function getLinkedInProfileMetrics(req: AuthRequest, res: Response)
 
 // ─── Receber métricas do LinkedIn via bookmarklet/script ─────────────────────
 
+async function resolveMetricUserId(req: AuthRequest): Promise<string | null> {
+  if (req.effectiveUserId) return req.effectiveUserId;
+
+  const body = getBody(req);
+  const userId = String(body?.userId || '');
+  const metricsToken = String(body?.metricsToken || '');
+  if (!userId || !metricsToken) return null;
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { settings: true },
+  });
+  return isValidMetricsToken(user?.settings, metricsToken) ? userId : null;
+}
+
 export async function receiveLinkedInMetrics(req: AuthRequest, res: Response) {
   try {
-    const { 
-      plataforma, 
-      perfil, 
-      visualizacoes, 
-      recrutadores, 
-      posts, 
-      seguidores, 
+    const body = getBody(req);
+    const {
+      plataforma,
+      perfil,
+      visualizacoes,
+      recrutadores,
+      posts,
+      seguidores,
       engajamento,
       data,
-      url 
-    } = req.body;
+      url
+    } = body;
+
+    const userId = await resolveMetricUserId(req);
+    if (!userId) {
+      return res.status(401).json({ error: 'Token de metricas invalido ou usuario nao informado' });
+    }
 
     // Validar dados mínimos
     if (!plataforma || plataforma !== 'LinkedIn') {
@@ -129,17 +185,20 @@ export async function receiveLinkedInMetrics(req: AuthRequest, res: Response) {
     // Salvar métricas no banco
     const metric = await prisma.metric.create({
       data: {
-        userId: req.effectiveUserId!,
+        userId,
         platform: 'linkedin',
         views: parseInt(visualizacoes) || 0,
         likes: parseInt(engajamento) || 0,
+        comments: parseInt(body.comentarios) || 0,
+        shares: parseInt(body.compartilhamentos || posts) || 0,
         followers: parseInt(seguidores) || 0,
+        reach: parseInt(body.alcance || body.impressoes) || 0,
         date: data ? new Date(data) : new Date(),
       },
     });
 
-    return res.json({ 
-      success: true, 
+    return res.json({
+      success: true,
       message: 'Métricas do LinkedIn sincronizadas com sucesso',
       metric: {
         id: metric.id,
