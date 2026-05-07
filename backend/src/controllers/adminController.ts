@@ -46,3 +46,13 @@ export async function deleteUser(req: AuthRequest, res: Response) {
     return res.json({ ok: true });
   } catch { return res.status(500).json({ error: 'Erro ao desativar usuario' }); }
 }
+
+export async function resetUserPassword(req: AuthRequest, res: Response) {
+  try {
+    const { id } = req.params;
+    const { password } = req.body;
+    const hashed = await bcrypt.hash(password || '203015', 10);
+    await prisma.user.update({ where: { id }, data: { password: hashed } });
+    return res.json({ ok: true, message: 'Senha alterada com sucesso' });
+  } catch { return res.status(500).json({ error: 'Erro ao alterar senha' }); }
+}
