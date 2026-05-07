@@ -97,7 +97,6 @@ export default function Conteudo() {
   const [weeklyTopic, setWeeklyTopic] = useState('');
   const [weeklyPlatform, setWeeklyPlatform] = useState('linkedin');
   const [weeklyPosts, setWeeklyPosts] = useState<any[]>([]);
-  const [weeklySchedules, setWeeklySchedules] = useState<Record<number, string>>({});
   const [loadingWeekly, setLoadingWeekly] = useState(false);
   const [savingWeekly, setSavingWeekly] = useState(false);
   const [weeklyStep, setWeeklyStep] = useState<'config' | 'review'>('config');
@@ -298,7 +297,6 @@ export default function Conteudo() {
     if (!weeklyTopic.trim()) return alert('Digite o tema da semana');
     setLoadingWeekly(true);
     setWeeklyPosts([]);
-    setWeeklySchedules({});
     try {
       const { data } = await api.post('/content/generate-week', {
         topic: weeklyTopic,
@@ -309,24 +307,6 @@ export default function Conteudo() {
         return;
       }
       setWeeklyPosts(data.posts);
-      // Pre-preenche horários sugeridos com datas da próxima semana
-      const schedules: Record<number, string> = {};
-      const today = new Date();
-      const dayMap: Record<string, number> = {
-        'Segunda': 1, 'Terca': 2, 'Quarta': 3, 'Quinta': 4,
-        'Sexta': 5, 'Sabado': 6, 'Domingo': 0,
-      };
-      data.posts.forEach((p: any, i: number) => {
-        const targetDay = dayMap[p.day] ?? i;
-        const d = new Date(today);
-        const diff = (targetDay - today.getDay() + 7) % 7 || 7;
-        d.setDate(today.getDate() + diff);
-        const [hh, mm] = (p.suggestedTime || '08:00').split(':');
-        d.setHours(parseInt(hh), parseInt(mm || '0'), 0, 0);
-        const local = d.toISOString().slice(0, 16);
-        schedules[i] = local;
-      });
-      setWeeklySchedules(schedules);
       setWeeklyStep('review');
     } catch (e: any) {
       alert(e.response?.data?.error || 'Erro ao gerar posts semanais');
@@ -339,17 +319,14 @@ export default function Conteudo() {
     if (weeklyPosts.length === 0) return;
     setSavingWeekly(true);
     try {
-      const postsToSave = weeklyPosts.map((p, i) => {
-        const scheduledAt = weeklySchedules[i];
-        return {
-          platform: weeklyPlatform,
-          content: p.content,
-          cta: p.cta || null,
-          hashtags: Array.isArray(p.hashtags) ? p.hashtags.join(' ') : (p.hashtags || null),
-          status: scheduledAt ? 'scheduled' : 'draft',
-          scheduledAt: scheduledAt || null,
-        };
-      });
+      const postsToSave = weeklyPosts.map((p) => ({
+        platform: weeklyPlatform,
+        content: p.content,
+        cta: p.cta || null,
+        hashtags: Array.isArray(p.hashtags) ? p.hashtags.join(' ') : (p.hashtags || null),
+        status: 'draft',
+        scheduledAt: null,
+      }));
 
       // Salvar em lote se possível, senão um por um
       try {
@@ -361,20 +338,16 @@ export default function Conteudo() {
         }
       }
 
-      const scheduledCount = postsToSave.filter(p => p.status === 'scheduled').length;
-      const draftCount = postsToSave.length - scheduledCount;
-
       alert(
         `${postsToSave.length} posts salvos!\n` +
-        `${scheduledCount} agendados\n` +
-        `${draftCount} como rascunho`
+        `0 agendados\n` +
+        `${postsToSave.length} como rascunho`
       );
 
       setShowWeeklyModal(false);
       setWeeklyPosts([]);
       setWeeklyTopic('');
       setWeeklyStep('config');
-      setWeeklySchedules({});
       if (tab === 'posts') loadPosts();
     } catch (e: any) {
       alert(e.response?.data?.error || 'Erro ao salvar posts');
