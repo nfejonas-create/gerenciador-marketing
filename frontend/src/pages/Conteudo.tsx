@@ -348,7 +348,7 @@ export default function Conteudo() {
       setWeeklyPosts([]);
       setWeeklyTopic('');
       setWeeklyStep('config');
-      if (tab === 'posts') loadPosts();
+      await loadPosts();
     } catch (e: any) {
       alert(e.response?.data?.error || 'Erro ao salvar posts');
     } finally {
